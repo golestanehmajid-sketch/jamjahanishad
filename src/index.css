@@ -1,0 +1,15 @@
+@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@100..900&family=JetBrains+Mono:wght@300;400;550;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Vazirmatn", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+html, body {
+  font-family: var(--font-sans);
+}
+
+.Persian-font {
+  font-family: var(--font-sans);
+}
