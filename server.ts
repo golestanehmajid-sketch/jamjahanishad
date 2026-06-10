@@ -8,6 +8,7 @@ const PORT = 3000;
 app.use(express.json());
 
 import {
+  initDb,
   dbGetParticipants,
   dbSaveParticipant,
   dbUpdateParticipant,
@@ -451,6 +452,8 @@ async function startServer() {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
+
+  await initDb();
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
