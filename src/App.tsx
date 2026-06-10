@@ -117,24 +117,36 @@ export default function App() {
       setShadError(null);
       
       fetch(`/api/shad/user-info?UserID=${encodeURIComponent(shadUserId)}`)
-        .then((res) => {
-          if (!res.ok) throw new Error("ارتباط با سرور همگام‌سازی شاد با شکست مواجه شد.");
-          return res.json();
+        .then(async (res) => {
+          const body = await res.json();
+          if (!res.ok || !body.success) {
+            throw new Error(body.error || "ارتباط با سرور همگام‌سازی شاد با شکست مواجه شد.");
+          }
+          return body;
         })
         .then((res) => {
           if (res.success && res.data) {
             setShadProfile(res.data);
-            const fullname = `${res.data.name} ${res.data.family}`.trim();
+            const fullname = `${res.data.name || ""} ${res.data.family || ""}`.trim();
             if (fullname) {
               setUserName(fullname);
               setTempName(fullname);
               localStorage.setItem("wc_predictor_username", fullname);
-              
-              // Push notification toast
-              setTimeout(() => {
-                showNotice(`🟢 همگام‌سازی موفق با شاد! خوش آمدی ${fullname} عزیز 🎓`);
-              }, 1200);
             }
+
+            const participantId =
+              res.participant?.id || res.data.hashedId || shadUserId;
+            setServerId(participantId);
+            localStorage.setItem("wc_predictor_server_id", participantId);
+            localStorage.setItem("wc_predictor_shad_hash", participantId);
+
+            setTimeout(() => {
+              showNotice(
+                fullname
+                  ? `🟢 خوش آمدی ${fullname}! حضور شما در سامانه ثبت شد 🎓`
+                  : "🟢 حضور شما در سامانه ثبت شد 🎓"
+              );
+            }, 1200);
           } else {
             setShadError(res.error || "شناسه معتبری در شاد یافت نشد.");
           }
@@ -155,7 +167,11 @@ export default function App() {
 
   const [isShadHelperOpen, setIsShadHelperOpen] = useState<boolean>(false);
   const [serverId, setServerId] = useState<string | null>(() => {
-    return localStorage.getItem("wc_predictor_server_id") || null;
+    return (
+      localStorage.getItem("wc_predictor_server_id") ||
+      localStorage.getItem("wc_predictor_shad_hash") ||
+      null
+    );
   });
   const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "waiting" | "saving" | "saved" | "error">("idle");
   const [isSubmittingToDB, setIsSubmittingToDB] = useState<boolean>(false);
@@ -629,15 +645,22 @@ export default function App() {
         predScore = Math.min(100, Math.round((groupPredCount / 48) * 60 + (koPredCount / 16) * 40));
       }
 
+      const shadHashedId =
+        shadProfile?.hashedId ||
+        localStorage.getItem("wc_predictor_shad_hash") ||
+        null;
+
       const payload = {
-        name: userName || "کاربر شاد دمو",
+        name: userName || "کاربر شاد",
         favoriteTeam: favoriteTeam || "ایران",
         predictedChampion: predictedChamp,
         predScore: predScore || 50,
-        status: totalPreds >= 48 ? "completed" : "active",
+        status: totalPreds >= 48 ? "completed" : totalPreds > 0 ? "active" : "visited",
         phoneOrEmail: customContact || (shadProfile ? shadProfile.mobile : "") || "از طریق شاد",
-        isPublished: true,
-        predictionsCount: totalPreds
+        isPublished: totalPreds > 0,
+        predictionsCount: totalPreds,
+        shadHashedId,
+        hashedId: shadHashedId,
       };
 
       let response;

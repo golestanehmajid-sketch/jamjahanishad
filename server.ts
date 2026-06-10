@@ -7,13 +7,16 @@ const PORT = 3000;
 
 app.use(express.json());
 
-import { 
-  dbGetParticipants, 
-  dbSaveParticipant, 
-  dbUpdateParticipant, 
-  dbDeleteParticipant, 
-  dbBulkSaveParticipants 
+import {
+  dbGetParticipants,
+  dbSaveParticipant,
+  dbUpdateParticipant,
+  dbDeleteParticipant,
+  dbBulkSaveParticipants,
+  dbUpsertShadParticipant,
+  dbGetParticipantByShadHashedId,
 } from "./src/db";
+import { getShadAccessToken, fetchShadUserEvent } from "./src/shad-api";
 
 // API routes FIRST
 app.get("/api/health", (req, res) => {
@@ -74,89 +77,90 @@ app.get("/api/shad/user-info", async (req, res) => {
       role: "student"
     };
 
+    const participant = await dbUpsertShadParticipant(mockStudent);
+
     return res.json({
       success: true,
       simulation: true,
       data: mockStudent,
-      description: "با موفقیت انجام شد (شبیه‌ساز هوشمند کلوپ شاد)"
+      participant,
+      description: "با موفقیت انجام شد (شبیه‌ساز — فقط برای توسعه لوکال)"
     });
   }
 
   try {
     const landingId = parseInt(landingIdStr, 10);
-    
-    // Step 1: Login to get the access token from NOYANET SHAD API
-    console.log("[SHAD API] Logging in to retrieve integration token...");
-    const loginResponse = await fetch("https://shadapi.noyanet.com/api/v1/Account/login", {
-      method: "POST",
-      headers: {
-        "Accept": "text/plain",
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        landingId,
-        username,
-        password
-      })
-    });
+    const token = await getShadAccessToken(landingId, username, password);
 
-    if (!loginResponse.ok) {
-      throw new Error(`شکست در همگام‌سازی احراز هویت با سرور شاد: ${loginResponse.statusText}`);
-    }
-
-    const loginData = await loginResponse.json();
-    const token = loginData.data;
-
-    if (!token) {
-      throw new Error("توکن اختصاصی از وب‌سرویس دریافت شاد بازگردانده نشد.");
-    }
-
-    // Step 2: Request user event information using the newly attained Bearer token
     console.log(`[SHAD API] Querying ShadEvent user details for UserHashId: ${userId}`);
-    const eventResponse = await fetch(`https://shadapi.noyanet.com/api/v1/ShadEvent?UserHashId=${encodeURIComponent(userId)}`, {
-      method: "GET",
-      headers: {
-        "Accept": "text/plain",
-        "Authorization": `Bearer ${token}`
-      }
-    });
+    const eventResult = await fetchShadUserEvent(userId, token);
 
-    if (!eventResponse.ok) {
-      throw new Error(`خطا در ارتباط با وب‌سرویس استعلام شاد: ${eventResponse.statusText}`);
+    if (!eventResult.success || !eventResult.data) {
+      return res.status(404).json({
+        success: false,
+        error: eventResult.description || "اطلاعات کاربر در شاد یافت نشد.",
+      });
     }
 
-    const eventResult = await eventResponse.json();
-    return res.json({
-      success: eventResult.success,
-      simulation: false,
-      data: eventResult.data,
-      description: eventResult.description || "اطلاعات با موفقیت از شاد همگام‌سازی شد."
-    });
+    const profileData = {
+      ...eventResult.data,
+      hashedId: eventResult.data.hashedId || userId,
+    };
 
+    const participant = await dbUpsertShadParticipant(profileData);
+
+    return res.json({
+      success: true,
+      simulation: false,
+      data: profileData,
+      participant,
+      description: eventResult.description || "اطلاعات با موفقیت از شاد همگام‌سازی شد.",
+    });
   } catch (error: any) {
     console.error("[SHAD Integration Error]", error.message);
-    
-    // Safe degradation: in case of transient network failure on production integration, fallback to simulator
-    return res.status(200).json({
-      success: true,
-      simulation: true,
-      networkError: error.message,
-      data: {
-        id: 500200,
-        nationalId: null,
-        hashedId: userId,
-        name: "کاربر لایو",
-        family: "شاد",
-        event: "سرویس رویداد زنده شاد",
-        provinceName: "ایلام",
-        mobile: "989350000000",
-        courseStudy: "متوسطه دوم تجربی",
-        districtName: "ایلام .ناحیه ۱",
-        fundamentalId: 3,
-        role: "student"
-      },
-      description: "به دلیل خطای ارتباطی فعال، نمایش شبیه‌ساز دانش‌آموز بر روی سیستم اعمال گردید."
+    return res.status(502).json({
+      success: false,
+      error: error.message || "خطا در ارتباط با وب‌سرویس شاد",
     });
+  }
+});
+
+app.post("/api/participants/register-shad", async (req, res) => {
+  try {
+    const hashedId =
+      req.body.hashedId || req.body.UserID || req.body.UserHashId || req.body.userId;
+
+    if (!hashedId) {
+      return res.status(400).json({ error: "شناسه کاربر شاد (hashedId) الزامی است." });
+    }
+
+    const participant = await dbUpsertShadParticipant(
+      {
+        hashedId,
+        id: req.body.id,
+        name: req.body.name,
+        family: req.body.family,
+        mobile: req.body.mobile,
+        event: req.body.event,
+        provinceName: req.body.provinceName,
+        districtName: req.body.districtName,
+        courseStudy: req.body.courseStudy,
+        role: req.body.role,
+      },
+      {
+        favoriteTeam: req.body.favoriteTeam,
+        predictedChampion: req.body.predictedChampion,
+        predScore: req.body.predScore,
+        status: req.body.status ?? "visited",
+        phoneOrEmail: req.body.mobile || req.body.phoneOrEmail,
+        isPublished: req.body.isPublished,
+        predictionsCount: req.body.predictionsCount,
+      }
+    );
+
+    res.status(201).json(participant);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -171,17 +175,58 @@ app.get("/api/participants", async (req, res) => {
 
 app.post("/api/participants", async (req, res) => {
   try {
+    const shadHashedId =
+      req.body.shadHashedId || req.body.hashedId || req.body.UserID || null;
+
+    if (shadHashedId) {
+      const existing = await dbGetParticipantByShadHashedId(shadHashedId);
+      if (existing) {
+        const updated = await dbUpdateParticipant(existing.id, {
+          name: req.body.name ?? existing.name,
+          favoriteTeam: req.body.favoriteTeam ?? existing.favoriteTeam,
+          predictedChampion: req.body.predictedChampion ?? existing.predictedChampion,
+          predScore: req.body.predScore ?? existing.predScore,
+          status: req.body.status ?? existing.status,
+          phoneOrEmail: req.body.phoneOrEmail ?? existing.phoneOrEmail,
+          isPublished: req.body.isPublished ?? existing.isPublished,
+          predictionsCount: req.body.predictionsCount ?? existing.predictionsCount,
+        });
+        return res.json(updated);
+      }
+
+      const saved = await dbUpsertShadParticipant(
+        {
+          hashedId: shadHashedId,
+          name: req.body.name,
+          family: req.body.family,
+          mobile: req.body.phoneOrEmail,
+        },
+        {
+          name: req.body.name || "",
+          favoriteTeam: req.body.favoriteTeam || "ایران",
+          predictedChampion: req.body.predictedChampion || "",
+          predScore: req.body.predScore || 0,
+          status: req.body.status || "active",
+          phoneOrEmail: req.body.phoneOrEmail || "",
+          isPublished: req.body.isPublished !== undefined ? req.body.isPublished : false,
+          registeredAt: new Date().toLocaleDateString("fa-IR"),
+          predictionsCount: req.body.predictionsCount || 0,
+        }
+      );
+      return res.status(201).json(saved);
+    }
+
     const newParticipant = {
       id: "p-" + Math.random().toString(36).substr(2, 9),
       registeredAt: new Date().toLocaleDateString("fa-IR"),
-      predictionsCount: req.body.predictionsCount || 48,
-      isPublished: req.body.isPublished !== undefined ? req.body.isPublished : true,
+      predictionsCount: req.body.predictionsCount || 0,
+      isPublished: req.body.isPublished !== undefined ? req.body.isPublished : false,
       name: req.body.name || "",
       favoriteTeam: req.body.favoriteTeam || "",
       predictedChampion: req.body.predictedChampion || "",
       predScore: req.body.predScore || 0,
       status: req.body.status || "active",
-      phoneOrEmail: req.body.phoneOrEmail || ""
+      phoneOrEmail: req.body.phoneOrEmail || "",
     };
     const saved = await dbSaveParticipant(newParticipant);
     res.status(201).json(saved);

@@ -4,6 +4,8 @@ import pg from "pg";
 
 export interface Participant {
   id: string;
+  shadHashedId?: string | null;
+  shadUserId?: number | null;
   name: string;
   favoriteTeam: string;
   predictedChampion: string;
@@ -13,6 +15,24 @@ export interface Participant {
   isPublished: boolean;
   registeredAt: string;
   predictionsCount: number;
+  provinceName?: string | null;
+  districtName?: string | null;
+  courseStudy?: string | null;
+  shadEvent?: string | null;
+  shadRole?: string | null;
+}
+
+export interface ShadProfileInput {
+  hashedId: string;
+  id?: number;
+  name?: string | null;
+  family?: string | null;
+  mobile?: string;
+  event?: string | null;
+  provinceName?: string | null;
+  districtName?: string | null;
+  courseStudy?: string | null;
+  role?: string | null;
 }
 
 const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), "data");
@@ -24,16 +44,6 @@ function ensureDataDir() {
   }
 }
 
-const DEFAULT_PARTICIPANTS: Participant[] = [
-  { id: "p-1", name: "علی دایی", favoriteTeam: "ایران", predictedChampion: "برزیل", predScore: 82, status: "completed", phoneOrEmail: "daei@football.ir", isPublished: true, registeredAt: "۱۴۰۵/۰۳/۱۵", predictionsCount: 48 },
-  { id: "p-2", name: "کریم باقری", favoriteTeam: "ایران", predictedChampion: "آلمان", predScore: 75, status: "completed", phoneOrEmail: "bagheri@football.id", isPublished: true, registeredAt: "۱۴۰۵/۰۳/۱۶", predictionsCount: 48 },
-  { id: "p-3", name: "حمید استیلی", favoriteTeam: "ایران", predictedChampion: "آرژانتین", predScore: 68, status: "completed", phoneOrEmail: "estili@champions.net", isPublished: true, registeredAt: "۱۴۰۵/۰3/۱۶", predictionsCount: 42 },
-  { id: "p-4", name: "مهدی مهدوی‌کیا", favoriteTeam: "ایران", predictedChampion: "فرانسه", predScore: 91, status: "completed", phoneOrEmail: "kia@hamburg.de", isPublished: true, registeredAt: "۱۴۰۵/۰۳/۱۷", predictionsCount: 48 },
-  { id: "p-5", name: "جواد نکونام", favoriteTeam: "اسپانیا", predictedChampion: "اسپانیا", predScore: 54, status: "active", phoneOrEmail: "neko@osasuna.es", isPublished: true, registeredAt: "۱۴۰۵/۰۳/۱۷", predictionsCount: 36 },
-  { id: "p-6", name: "خداداد عزیزی", favoriteTeam: "ایران", predictedChampion: "انگلیس", predScore: 40, status: "pending", phoneOrEmail: "khodadad@saga.ir", isPublished: false, registeredAt: "۱۴۰۵/۰۳/۱۸", predictionsCount: 12 }
-];
-
-// Determine if we should use PostgreSQL
 const DATABASE_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL || "";
 
 let pool: pg.Pool | null = null;
@@ -46,7 +56,6 @@ function resolvePgSsl(): false | { rejectUnauthorized: boolean } {
   if (process.env.DATABASE_SSL === "false") {
     return false;
   }
-  // Liara private-network Postgres does not use SSL; enable only when URL asks for it
   if (/sslmode=(require|verify-full|verify-ca)/i.test(DATABASE_URL)) {
     return { rejectUnauthorized: false };
   }
@@ -63,10 +72,11 @@ if (DATABASE_URL) {
   console.log(`📁 No DATABASE_URL detected. Using file storage at ${PARTICIPANTS_FILE}`);
 }
 
-// Map database row to Participant object
 function mapRowToParticipant(row: any): Participant {
   return {
     id: row.id,
+    shadHashedId: row.shad_hashed_id ?? null,
+    shadUserId: row.shad_user_id ?? null,
     name: row.name,
     favoriteTeam: row.favorite_team,
     predictedChampion: row.predicted_champion,
@@ -75,8 +85,79 @@ function mapRowToParticipant(row: any): Participant {
     phoneOrEmail: row.phone_or_email,
     isPublished: row.is_published,
     registeredAt: row.registered_at,
-    predictionsCount: row.predictions_count
+    predictionsCount: row.predictions_count,
+    provinceName: row.province_name ?? null,
+    districtName: row.district_name ?? null,
+    courseStudy: row.course_study ?? null,
+    shadEvent: row.shad_event ?? null,
+    shadRole: row.shad_role ?? null,
   };
+}
+
+function participantToRow(p: Participant) {
+  return [
+    p.id,
+    p.shadHashedId ?? null,
+    p.shadUserId ?? null,
+    p.name,
+    p.favoriteTeam,
+    p.predictedChampion,
+    p.predScore,
+    p.status,
+    p.phoneOrEmail,
+    p.isPublished,
+    p.registeredAt,
+    p.predictionsCount,
+    p.provinceName ?? null,
+    p.districtName ?? null,
+    p.courseStudy ?? null,
+    p.shadEvent ?? null,
+    p.shadRole ?? null,
+  ];
+}
+
+const PARTICIPANT_COLUMNS = `
+  id, shad_hashed_id, shad_user_id, name, favorite_team, predicted_champion,
+  pred_score, status, phone_or_email, is_published, registered_at, predictions_count,
+  province_name, district_name, course_study, shad_event, shad_role
+`;
+
+async function migrateParticipantsTable() {
+  if (!pool) return;
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS participants (
+      id VARCHAR(200) PRIMARY KEY,
+      shad_hashed_id VARCHAR(200),
+      shad_user_id INT,
+      name VARCHAR(200) NOT NULL,
+      favorite_team VARCHAR(200),
+      predicted_champion VARCHAR(200),
+      pred_score INT DEFAULT 0,
+      status VARCHAR(100) DEFAULT 'visited',
+      phone_or_email VARCHAR(200),
+      is_published BOOLEAN DEFAULT FALSE,
+      registered_at VARCHAR(100),
+      predictions_count INT DEFAULT 0,
+      province_name VARCHAR(200),
+      district_name VARCHAR(200),
+      course_study VARCHAR(200),
+      shad_event VARCHAR(300),
+      shad_role VARCHAR(100)
+    )
+  `);
+
+  await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS shad_hashed_id VARCHAR(200)`);
+  await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS shad_user_id INT`);
+  await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS province_name VARCHAR(200)`);
+  await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS district_name VARCHAR(200)`);
+  await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS course_study VARCHAR(200)`);
+  await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS shad_event VARCHAR(300)`);
+  await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS shad_role VARCHAR(100)`);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS participants_shad_hashed_id_unique
+    ON participants (shad_hashed_id) WHERE shad_hashed_id IS NOT NULL
+  `);
 }
 
 export async function initDb() {
@@ -85,44 +166,12 @@ export async function initDb() {
   if (pool) {
     try {
       console.log("⏳ Initializing database tables in PostgreSQL...");
-      // Create table if not exists with correct data schema
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS participants (
-          id VARCHAR(100) PRIMARY KEY,
-          name VARCHAR(200) NOT NULL,
-          favorite_team VARCHAR(200),
-          predicted_champion VARCHAR(200),
-          pred_score INT DEFAULT 0,
-          status VARCHAR(100) DEFAULT 'active',
-          phone_or_email VARCHAR(200),
-          is_published BOOLEAN DEFAULT TRUE,
-          registered_at VARCHAR(100),
-          predictions_count INT DEFAULT 0
-        )
-      `);
-      
-      // Check if table is empty, if is empty seed with default initial data
-      const checkRes = await pool.query("SELECT COUNT(*) FROM participants");
-      const count = parseInt(checkRes.rows[0].count, 10);
-      if (count === 0) {
-        console.log("🌱 Seeding empty PostgreSQL database with initial participants...");
-        for (const p of DEFAULT_PARTICIPANTS) {
-          await pool.query(`
-            INSERT INTO participants 
-            (id, name, favorite_team, predicted_champion, pred_score, status, phone_or_email, is_published, registered_at, predictions_count)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-          `, [
-            p.id, p.name, p.favoriteTeam, p.predictedChampion, p.predScore, 
-            p.status, p.phoneOrEmail, p.isPublished, p.registeredAt, p.predictionsCount
-          ]);
-        }
-        console.log("✅ Seeding completed successfully.");
-      }
+      await migrateParticipantsTable();
       isDbInitialized = true;
       console.log("❇️ PostgreSQL initialization completed.");
     } catch (err) {
       console.error("❌ Failed to initialize PostgreSQL table. Falling back to File Mode.", err);
-      pool = null; // Mark as null to use fallback file mode gracefully
+      pool = null;
     }
   }
 
@@ -130,7 +179,7 @@ export async function initDb() {
     try {
       ensureDataDir();
       if (!fs.existsSync(PARTICIPANTS_FILE)) {
-        fs.writeFileSync(PARTICIPANTS_FILE, JSON.stringify(DEFAULT_PARTICIPANTS, null, 2), "utf-8");
+        fs.writeFileSync(PARTICIPANTS_FILE, "[]", "utf-8");
       }
       isDbInitialized = true;
       console.log("❇️ Local file storage initialized successfully.");
@@ -138,6 +187,99 @@ export async function initDb() {
       console.error("❌ Failed to initialize local file storage:", err);
     }
   }
+}
+
+export function buildParticipantFromShad(
+  shad: ShadProfileInput,
+  overrides: Partial<Participant> = {}
+): Participant {
+  const hashedId = shad.hashedId;
+  const fullName = `${shad.name || ""} ${shad.family || ""}`.trim() || "کاربر شاد";
+
+  return {
+    id: hashedId,
+    shadHashedId: hashedId,
+    shadUserId: shad.id ?? null,
+    name: overrides.name ?? fullName,
+    favoriteTeam: overrides.favoriteTeam ?? "ایران",
+    predictedChampion: overrides.predictedChampion ?? "",
+    predScore: overrides.predScore ?? 0,
+    status: overrides.status ?? "visited",
+    phoneOrEmail: overrides.phoneOrEmail ?? shad.mobile ?? "",
+    isPublished: overrides.isPublished ?? false,
+    registeredAt: overrides.registeredAt ?? new Date().toLocaleDateString("fa-IR"),
+    predictionsCount: overrides.predictionsCount ?? 0,
+    provinceName: shad.provinceName ?? null,
+    districtName: shad.districtName ?? null,
+    courseStudy: shad.courseStudy ?? null,
+    shadEvent: shad.event ?? null,
+    shadRole: shad.role ?? null,
+  };
+}
+
+export async function dbGetParticipantByShadHashedId(hashedId: string): Promise<Participant | null> {
+  await initDb();
+
+  if (pool) {
+    try {
+      const res = await pool.query(
+        "SELECT * FROM participants WHERE shad_hashed_id = $1 OR id = $1 LIMIT 1",
+        [hashedId]
+      );
+      if (res.rows.length > 0) return mapRowToParticipant(res.rows[0]);
+    } catch (err) {
+      console.error("Error reading participant by shad hash:", err);
+    }
+  }
+
+  const list = await dbGetParticipants();
+  return list.find((p) => p.shadHashedId === hashedId || p.id === hashedId) ?? null;
+}
+
+export async function dbUpsertShadParticipant(
+  shad: ShadProfileInput,
+  overrides: Partial<Participant> = {}
+): Promise<Participant> {
+  await initDb();
+  const participant = buildParticipantFromShad(shad, overrides);
+
+  if (pool) {
+    try {
+      const res = await pool.query(
+        `
+        INSERT INTO participants (${PARTICIPANT_COLUMNS})
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+        ON CONFLICT (id) DO UPDATE SET
+          shad_hashed_id = EXCLUDED.shad_hashed_id,
+          shad_user_id = COALESCE(EXCLUDED.shad_user_id, participants.shad_user_id),
+          name = EXCLUDED.name,
+          phone_or_email = COALESCE(NULLIF(EXCLUDED.phone_or_email, ''), participants.phone_or_email),
+          province_name = COALESCE(EXCLUDED.province_name, participants.province_name),
+          district_name = COALESCE(EXCLUDED.district_name, participants.district_name),
+          course_study = COALESCE(EXCLUDED.course_study, participants.course_study),
+          shad_event = COALESCE(EXCLUDED.shad_event, participants.shad_event),
+          shad_role = COALESCE(EXCLUDED.shad_role, participants.shad_role)
+        RETURNING *
+        `,
+        participantToRow(participant)
+      );
+      return mapRowToParticipant(res.rows[0]);
+    } catch (err) {
+      console.error("Error upserting Shad participant in PostgreSQL:", err);
+      throw err;
+    }
+  }
+
+  const list = await dbGetParticipants();
+  const idx = list.findIndex((p) => p.shadHashedId === participant.shadHashedId || p.id === participant.id);
+  if (idx >= 0) {
+    list[idx] = { ...list[idx], ...participant, ...overrides };
+    fs.writeFileSync(PARTICIPANTS_FILE, JSON.stringify(list, null, 2), "utf-8");
+    return list[idx];
+  }
+  list.push(participant);
+  fs.writeFileSync(PARTICIPANTS_FILE, JSON.stringify(list, null, 2), "utf-8");
+  return participant;
 }
 
 export async function dbGetParticipants(): Promise<Participant[]> {
@@ -152,16 +294,16 @@ export async function dbGetParticipants(): Promise<Participant[]> {
     }
   }
 
-  // Fallback to local file
   try {
     if (!fs.existsSync(PARTICIPANTS_FILE)) {
-      return DEFAULT_PARTICIPANTS;
+      return [];
     }
     const data = fs.readFileSync(PARTICIPANTS_FILE, "utf-8");
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+    return Array.isArray(parsed) ? parsed : [];
   } catch (err) {
     console.error("Error parsing participants file:", err);
-    return DEFAULT_PARTICIPANTS;
+    return [];
   }
 }
 
@@ -170,28 +312,23 @@ export async function dbSaveParticipant(p: Participant): Promise<Participant> {
 
   if (pool) {
     try {
-      await pool.query(`
-        INSERT INTO participants 
-        (id, name, favorite_team, predicted_champion, pred_score, status, phone_or_email, is_published, registered_at, predictions_count)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      `, [
-        p.id, p.name, p.favoriteTeam, p.predictedChampion, p.predScore, 
-        p.status, p.phoneOrEmail, p.isPublished, p.registeredAt, p.predictionsCount
-      ]);
+      await pool.query(
+        `
+        INSERT INTO participants (${PARTICIPANT_COLUMNS})
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+        `,
+        participantToRow(p)
+      );
       return p;
     } catch (err) {
       console.error("Error inserting into PostgreSQL:", err);
+      throw err;
     }
   }
 
-  // Fallback
   const list = await dbGetParticipants();
   list.push(p);
-  try {
-    fs.writeFileSync(PARTICIPANTS_FILE, JSON.stringify(list, null, 2), "utf-8");
-  } catch (err) {
-    console.error("Error writing JSON fallback:", err);
-  }
+  fs.writeFileSync(PARTICIPANTS_FILE, JSON.stringify(list, null, 2), "utf-8");
   return p;
 }
 
@@ -200,53 +337,42 @@ export async function dbUpdateParticipant(id: string, updates: Partial<Participa
 
   if (pool) {
     try {
-      // Build dynamic SQL settlement for fields provided
       const fields: string[] = [];
       const values: any[] = [];
       let paramIndex = 1;
 
-      if (updates.name !== undefined) {
-        fields.push(`name = $${paramIndex++}`);
-        values.push(updates.name);
-      }
-      if (updates.favoriteTeam !== undefined) {
-        fields.push(`favorite_team = $${paramIndex++}`);
-        values.push(updates.favoriteTeam);
-      }
-      if (updates.predictedChampion !== undefined) {
-        fields.push(`predicted_champion = $${paramIndex++}`);
-        values.push(updates.predictedChampion);
-      }
-      if (updates.predScore !== undefined) {
-        fields.push(`pred_score = $${paramIndex++}`);
-        values.push(updates.predScore);
-      }
-      if (updates.status !== undefined) {
-        fields.push(`status = $${paramIndex++}`);
-        values.push(updates.status);
-      }
-      if (updates.phoneOrEmail !== undefined) {
-        fields.push(`phone_or_email = $${paramIndex++}`);
-        values.push(updates.phoneOrEmail);
-      }
-      if (updates.isPublished !== undefined) {
-        fields.push(`is_published = $${paramIndex++}`);
-        values.push(updates.isPublished);
-      }
-      if (updates.registeredAt !== undefined) {
-        fields.push(`registered_at = $${paramIndex++}`);
-        values.push(updates.registeredAt);
-      }
-      if (updates.predictionsCount !== undefined) {
-        fields.push(`predictions_count = $${paramIndex++}`);
-        values.push(updates.predictionsCount);
+      const columnMap: Record<string, string> = {
+        name: "name",
+        favoriteTeam: "favorite_team",
+        predictedChampion: "predicted_champion",
+        predScore: "pred_score",
+        status: "status",
+        phoneOrEmail: "phone_or_email",
+        isPublished: "is_published",
+        registeredAt: "registered_at",
+        predictionsCount: "predictions_count",
+        provinceName: "province_name",
+        districtName: "district_name",
+        courseStudy: "course_study",
+        shadEvent: "shad_event",
+        shadRole: "shad_role",
+        shadUserId: "shad_user_id",
+        shadHashedId: "shad_hashed_id",
+      };
+
+      for (const [key, column] of Object.entries(columnMap)) {
+        const value = (updates as any)[key];
+        if (value !== undefined) {
+          fields.push(`${column} = $${paramIndex++}`);
+          values.push(value);
+        }
       }
 
       if (fields.length > 0) {
         values.push(id);
         const query = `
-          UPDATE participants 
-          SET ${fields.join(", ")} 
+          UPDATE participants
+          SET ${fields.join(", ")}
           WHERE id = $${paramIndex}
           RETURNING *
         `;
@@ -257,20 +383,16 @@ export async function dbUpdateParticipant(id: string, updates: Partial<Participa
       }
     } catch (err) {
       console.error("Error updating PostgreSQL participant:", err);
+      throw err;
     }
   }
 
-  // Fallback
   const list = await dbGetParticipants();
   const idx = list.findIndex((p) => p.id === id);
   if (idx !== -1) {
     list[idx] = { ...list[idx], ...updates };
-    try {
-      fs.writeFileSync(PARTICIPANTS_FILE, JSON.stringify(list, null, 2), "utf-8");
-      return list[idx];
-    } catch (err) {
-      console.error("Error writing JSON fallback updates:", err);
-    }
+    fs.writeFileSync(PARTICIPANTS_FILE, JSON.stringify(list, null, 2), "utf-8");
+    return list[idx];
   }
   return null;
 }
@@ -281,22 +403,18 @@ export async function dbDeleteParticipant(id: string): Promise<boolean> {
   if (pool) {
     try {
       const res = await pool.query("DELETE FROM participants WHERE id = $1", [id]);
-      return (res.rowCount !== null && res.rowCount > 0);
+      return res.rowCount !== null && res.rowCount > 0;
     } catch (err) {
       console.error("Error deleting from PostgreSQL:", err);
+      throw err;
     }
   }
 
-  // Fallback
   const list = await dbGetParticipants();
   const filtered = list.filter((p) => p.id !== id);
   if (filtered.length !== list.length) {
-    try {
-      fs.writeFileSync(PARTICIPANTS_FILE, JSON.stringify(filtered, null, 2), "utf-8");
-      return true;
-    } catch (err) {
-      console.error("Error writing JSON fallback deletion:", err);
-    }
+    fs.writeFileSync(PARTICIPANTS_FILE, JSON.stringify(filtered, null, 2), "utf-8");
+    return true;
   }
   return false;
 }
@@ -305,41 +423,29 @@ export async function dbBulkSaveParticipants(newList: Participant[]): Promise<bo
   await initDb();
 
   if (pool) {
+    const client = await pool.connect();
     try {
-      // Clear entire table and insert in bulk transactionally
-      const client = await pool.connect();
-      try {
-        await client.query("BEGIN");
-        await client.query("DELETE FROM participants");
-        for (const p of newList) {
-          await client.query(`
-            INSERT INTO participants 
-            (id, name, favorite_team, predicted_champion, pred_score, status, phone_or_email, is_published, registered_at, predictions_count)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-          `, [
-            p.id, p.name, p.favoriteTeam, p.predictedChampion, p.predScore, 
-            p.status, p.phoneOrEmail, p.isPublished, p.registeredAt, p.predictionsCount
-          ]);
-        }
-        await client.query("COMMIT");
-        return true;
-      } catch (transactionErr) {
-        await client.query("ROLLBACK");
-        throw transactionErr;
-      } finally {
-        client.release();
+      await client.query("BEGIN");
+      await client.query("DELETE FROM participants");
+      for (const p of newList) {
+        await client.query(
+          `
+          INSERT INTO participants (${PARTICIPANT_COLUMNS})
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+          `,
+          participantToRow(p)
+        );
       }
-    } catch (err) {
-      console.error("Error bulk saving to PostgreSQL:", err);
+      await client.query("COMMIT");
+      return true;
+    } catch (transactionErr) {
+      await client.query("ROLLBACK");
+      throw transactionErr;
+    } finally {
+      client.release();
     }
   }
 
-  // Fallback
-  try {
-    fs.writeFileSync(PARTICIPANTS_FILE, JSON.stringify(newList, null, 2), "utf-8");
-    return true;
-  } catch (err) {
-    console.error("Error writing JSON fallback bulk save:", err);
-    return false;
-  }
+  fs.writeFileSync(PARTICIPANTS_FILE, JSON.stringify(newList, null, 2), "utf-8");
+  return true;
 }
