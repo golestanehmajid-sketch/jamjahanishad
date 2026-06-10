@@ -41,7 +41,9 @@ import {
   Users,
   ShieldCheck,
   Settings,
-  Gift
+  Gift,
+  Search,
+  X
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -165,6 +167,12 @@ export default function App() {
     return localStorage.getItem("wc_predictor_fav_team") || null;
   });
 
+  const [campaignChamp, setCampaignChamp] = useState<string>(() => {
+    return localStorage.getItem("predictor_campaign_champ") || "";
+  });
+  const [isChampModalOpen, setIsChampModalOpen] = useState(false);
+  const [champModalSearch, setChampModalSearch] = useState("");
+
   const [isShadHelperOpen, setIsShadHelperOpen] = useState<boolean>(false);
   const [serverId, setServerId] = useState<string | null>(() => {
     return (
@@ -257,7 +265,7 @@ export default function App() {
     return () => {
       clearTimeout(delayDebounceId);
     };
-  }, [matches, knockoutPredictions, userName, favoriteTeam]);
+  }, [matches, knockoutPredictions, userName, favoriteTeam, campaignChamp]);
 
   // ----------------------------------------------------
   // 3. COMPUTED STATES
@@ -620,23 +628,27 @@ export default function App() {
       const totalPreds = groupPredCount + koPredCount;
 
       let predictedChamp = "نامشخص";
-      const finalMatch = knockoutPredictions["FINAL_2"];
-      if (finalMatch) {
-        if (finalMatch.homeGoals !== undefined && finalMatch.awayGoals !== undefined) {
-          if (finalMatch.homeGoals > finalMatch.awayGoals) {
-            predictedChamp = "ایران"; 
-          } else if (finalMatch.awayGoals > finalMatch.homeGoals) {
-            predictedChamp = "بلژیک"; 
-          }
-          if (finalMatch.penaltyWinner) {
-            predictedChamp = finalMatch.penaltyWinner;
+      if (campaignChamp && TEAMS[campaignChamp]) {
+        predictedChamp = TEAMS[campaignChamp].name;
+      } else {
+        const finalMatch = knockoutPredictions["FINAL_2"];
+        if (finalMatch) {
+          if (finalMatch.homeGoals !== undefined && finalMatch.awayGoals !== undefined) {
+            if (finalMatch.homeGoals > finalMatch.awayGoals) {
+              predictedChamp = "ایران"; 
+            } else if (finalMatch.awayGoals > finalMatch.homeGoals) {
+              predictedChamp = "بلژیک"; 
+            }
+            if (finalMatch.penaltyWinner) {
+              predictedChamp = finalMatch.penaltyWinner;
+            }
           }
         }
-      }
-      if (predictedChamp === "نامشخص" && favoriteTeam) {
-        predictedChamp = favoriteTeam;
-      } else if (predictedChamp === "نامشخص") {
-        predictedChamp = "ایران";
+        if (predictedChamp === "نامشخص" && favoriteTeam) {
+          predictedChamp = TEAMS[favoriteTeam]?.name || favoriteTeam;
+        } else if (predictedChamp === "نامشخص") {
+          predictedChamp = "ایران";
+        }
       }
 
       // Generate a prediction quality rating
@@ -1345,6 +1357,70 @@ export default function App() {
                 onEnthusiasmChange={setIranEnthusiasm}
               />
 
+              {/* 🏆 Ultimate World Cup Champion Predictor Widget (Campaign) */}
+              <div id="campaign-ultimate-champion-predictor" className="bg-gradient-to-r from-slate-900 via-indigo-950/15 to-slate-900 border border-purple-500/15 rounded-3xl p-5 sm:p-6 shadow-xl relative overflow-hidden">
+                {/* Glowing effects */}
+                <div className="absolute top-0 right-0 w-32 h-1 bg-gradient-to-l from-pink-500 via-purple-500 to-indigo-500 rounded-full" />
+                <div className="absolute -top-10 -right-10 w-44 h-44 bg-purple-500/5 rounded-full filter blur-2xl pointer-events-none" />
+
+                <div className="flex flex-col md:flex-row items-center justify-between gap-5 relative z-10 w-full text-right" dir="rtl">
+                  <div className="flex items-center gap-4 flex-col sm:flex-row text-center sm:text-right w-full md:w-auto">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-yellow-400 to-amber-500 text-slate-950 shadow-lg shadow-amber-500/20">
+                      <Trophy size={24} className="animate-pulse" />
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-black text-purple-400 bg-purple-500/10 px-2.5 py-0.5 rounded-full border border-purple-500/20 select-none">
+                         پیش‌بینی زودهنگام و دریافت امتیاز هدیه 🎁
+                      </span>
+                      <h3 className="text-sm sm:text-base font-black text-white mt-1 leading-relaxed Persian-font">
+                        انتخاب قهرمان نهایی جام جهانی ۲۰۲۶
+                      </h3>
+                      <p className="text-[10px] sm:text-xs text-slate-400">
+                        تیم قهرمان مورد حمایت خود را مستقیماً برگزینید تا ۱۵۰ امتیاز بونس کارشناسی فوتبال برای شما لحاظ شود!
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 w-full md:w-auto justify-center md:justify-end">
+                    {campaignChamp && TEAMS[campaignChamp] ? (
+                      <div className="flex items-center gap-4 bg-slate-950/60 border border-purple-500/30 p-2.5 px-4 rounded-xl relative overflow-hidden shadow-inner font-sans">
+                        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500"></div>
+                        <div className="flex items-center gap-3">
+                          <TeamFlag team={TEAMS[campaignChamp]} className="w-10 h-7 rounded shadow border border-white/20 object-cover shrink-0" />
+                          <div className="text-right leading-none">
+                            <span className="text-[9px] text-slate-400 font-bold block">قهرمان انتخابی شما:</span>
+                            <span className="text-xs sm:text-sm font-black text-pink-400 mt-1 block">{TEAMS[campaignChamp]?.name || campaignChamp}</span>
+                          </div>
+                        </div>
+                        <div className="w-px h-8 bg-slate-800" />
+                        <button
+                          id="change-ultimate-champ-btn"
+                          onClick={() => {
+                            setIsChampModalOpen(true);
+                            setChampModalSearch("");
+                          }}
+                          className="text-[10.5px] font-bold text-slate-400 hover:text-white underline cursor-pointer duration-150 py-1"
+                        >
+                          تغییر تیم
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        id="select-ultimate-champ-btn"
+                        onClick={() => {
+                          setIsChampModalOpen(true);
+                          setChampModalSearch("");
+                        }}
+                        className="px-5 py-3 rounded-xl bg-gradient-to-r from-pink-500 via-purple-600 to-indigo-600 hover:opacity-95 font-black text-xs text-white shadow-lg shadow-purple-500/25 active:scale-95 duration-150 cursor-pointer flex items-center gap-2 outline-none border border-white/5"
+                      >
+                        <Sparkles size={14} className="text-yellow-200 animate-spin" />
+                        <span>انتخاب قهرمان جام</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               {/* Group filter slide buttons */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-slate-900/40 p-3 rounded-2xl border border-white/5">
                 <div className="flex flex-wrap items-center gap-1.5 justify-center font-bold">
@@ -1766,6 +1842,94 @@ export default function App() {
                 >
                   بارگذاری پیش‌بینی دوست
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 🏆 ULTIMATE CHAMPION SELECTION MODAL */}
+      <AnimatePresence>
+        {isChampModalOpen && (
+          <div id="champ-selection-modal" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-slate-950/90 backdrop-blur-md border border-white/10 rounded-3xl w-full max-w-lg p-6 flex flex-col gap-4 shadow-2xl shadow-purple-950/40 relative max-h-[85vh] text-right"
+              dir="rtl"
+            >
+              {/* Close Button */}
+              <button
+                id="close-champ-modal"
+                onClick={() => setIsChampModalOpen(false)}
+                className="absolute top-4 left-4 text-slate-400 hover:text-white bg-slate-900 p-1.5 rounded-lg border border-white/5 duration-150 cursor-pointer hover:bg-slate-800"
+              >
+                ✕
+              </button>
+
+              <div className="flex items-center gap-2.5 mb-2">
+                <div className="p-2 rounded-xl bg-pink-500/10 text-pink-400">
+                  <Trophy size={16} className="text-yellow-400 rotate-12" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-slate-100 Persian-font">انتخاب قهرمان طلایی جام</h3>
+                  <p className="text-[10px] sm:text-xs text-slate-400">یک کشور را به عنوان پیش‌بینی فاتح جام انتخاب کنید</p>
+                </div>
+              </div>
+
+              {/* Search Field */}
+              <div className="relative">
+                <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="جستجوی نام کشور یا کلمه کلیدی..."
+                  value={champModalSearch}
+                  onChange={(e) => setChampModalSearch(e.target.value)}
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl pr-9 pl-3 py-2.5 text-xs font-bold text-slate-200 outline-none focus:border-pink-500/40 text-right"
+                />
+              </div>
+
+              {/* Grid of Teams */}
+              <div className="overflow-y-auto pr-1 space-y-2 flex-1 scrollbar-thin scrollbar-thumb-white/10 max-h-[50vh]">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pb-2">
+                  {Array.from(new Map(Object.values(TEAMS).map(t => [t.id, t])).values())
+                    .filter(t => 
+                      t.name.includes(champModalSearch) || 
+                      t.nameEn.toLowerCase().includes(champModalSearch.toLowerCase())
+                    )
+                    .map(t => {
+                      const isSelected = campaignChamp === t.id;
+                      return (
+                        <button
+                          id={`camp-champ-item-${t.id}`}
+                          key={t.id}
+                          onClick={() => {
+                            setCampaignChamp(t.id);
+                            localStorage.setItem("predictor_campaign_champ", t.id);
+                            setIsChampModalOpen(false);
+                            showNotice(`تیم ${t.name} به عنوان قهرمان نهایی انتخاب شد! ۱۵۰ امتیاز ویژه هدیه برای شما فعال گشت. 🏆🔥`);
+                          }}
+                          className={`flex items-center gap-2.5 p-2.5 rounded-xl border transition-all duration-150 text-right w-full cursor-pointer hover:scale-[1.02] ${
+                            isSelected 
+                              ? "bg-gradient-to-l from-pink-500/25 to-indigo-500/25 border-pink-500 text-white font-black animate-pulse" 
+                              : "bg-slate-950/40 hover:bg-slate-950/90 border-white/5 text-slate-300 hover:text-white"
+                          }`}
+                        >
+                          <TeamFlag team={t} className="w-7 h-4.5 rounded border border-white/10 shrink-0 object-cover" />
+                          <div className="flex flex-col text-right leading-none min-w-0 flex-1">
+                            <span className="text-xs font-black truncate">{t.name}</span>
+                            <span className="text-[9px] text-slate-500 font-mono truncate">{t.nameEn}</span>
+                          </div>
+                          {isSelected && <Check size={13} className="text-pink-400 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+
+              <div className="text-[10px] text-center text-slate-500 pt-2 border-t border-white/5 Persian-font">
+                🎁 با انتخاب قهرمان زودهنگام، <span className="text-pink-400 font-bold">۱۵۰ امتیاز بونس</span> ویژه برای شما فعال می‌شود.
               </div>
             </motion.div>
           </div>
