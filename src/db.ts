@@ -39,12 +39,25 @@ const DATABASE_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL || "";
 let pool: pg.Pool | null = null;
 let isDbInitialized = false;
 
+function resolvePgSsl(): false | { rejectUnauthorized: boolean } {
+  if (process.env.DATABASE_SSL === "true") {
+    return { rejectUnauthorized: false };
+  }
+  if (process.env.DATABASE_SSL === "false") {
+    return false;
+  }
+  // Liara private-network Postgres does not use SSL; enable only when URL asks for it
+  if (/sslmode=(require|verify-full|verify-ca)/i.test(DATABASE_URL)) {
+    return { rejectUnauthorized: false };
+  }
+  return false;
+}
+
 if (DATABASE_URL) {
   console.log("🔌 PostgreSQL Database URL detected. Setting up connection pool...");
   pool = new pg.Pool({
     connectionString: DATABASE_URL,
-    // Add SSL configurations for hosted environments like Liara if needed (optional)
-    ssl: DATABASE_URL.includes("localhost") || DATABASE_URL.includes("127.0.0.1") ? false : { rejectUnauthorized: false }
+    ssl: resolvePgSsl(),
   });
 } else {
   console.log(`📁 No DATABASE_URL detected. Using file storage at ${PARTICIPANTS_FILE}`);

@@ -55,9 +55,23 @@ npm run dev
 | `SHAD_LANDING_ID` | برای شاد | شناسه لندینگ |
 | `SHAD_USERNAME` | برای شاد | نام کاربری |
 | `SHAD_PASSWORD` | برای شاد | رمز عبور |
-| `DATABASE_URL` | خیر | فقط اگر PostgreSQL ساختید |
+| `DATABASE_URL` | خیر | اتصال PostgreSQL (شبکه خصوصی لیارا) |
+| `DATABASE_SSL` | خیر | فقط برای اتصال عمومی: `true` — شبکه خصوصی لیارا نیاز ندارد |
 
 متغیرها با deploy عوض نمی‌شوند — یک‌بار در پنل کافی است.
+
+### اتصال PostgreSQL (لیارا)
+
+1. دیتابیس و برنامه در **یک شبکه خصوصی**
+2. در متغیرهای برنامه: `DATABASE_URL=postgresql://root:PASSWORD@شناسه-db:5432/postgres`
+3. **SSL لازم نیست** — شبکه خصوصی لیارا بدون SSL کار می‌کند
+4. ری‌استارت یا `npm run deploy:liara`
+5. در لاگ باید ببینید: `❇️ PostgreSQL initialization completed.`
+
+جدول داده: `participants` — چک در pgAdmin:
+```sql
+SELECT * FROM participants;
+```
 
 ---
 
