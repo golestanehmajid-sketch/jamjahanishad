@@ -16,6 +16,9 @@ import {
   dbBulkSaveParticipants,
   dbUpsertShadParticipant,
   dbGetParticipantByShadHashedId,
+  dbGetActionLogs,
+  dbSaveActionLog,
+  dbClearActionLogs,
 } from "./src/db";
 import { getShadAccessToken, fetchShadUserEvent } from "./src/shad-api";
 
@@ -160,6 +163,45 @@ app.post("/api/participants/register-shad", async (req, res) => {
     );
 
     res.status(201).json(participant);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 📌 USER ACTION TRACKING ENDPOINTS
+app.get("/api/action-logs", async (req, res) => {
+  try {
+    const list = await dbGetActionLogs();
+    res.json(list);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/action-logs", async (req, res) => {
+  try {
+    const { username, action, details } = req.body;
+    if (!username || !action) {
+      return res.status(400).json({ error: "Username and action fields are required." });
+    }
+    const log = {
+      id: "log-" + Date.now() + "-" + Math.random().toString(36).substr(2, 5),
+      username,
+      action,
+      timestamp: new Date().toISOString(),
+      details: details ? (typeof details === 'object' ? JSON.stringify(details) : String(details)) : undefined,
+    };
+    const saved = await dbSaveActionLog(log);
+    res.status(201).json(saved);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete("/api/action-logs", async (req, res) => {
+  try {
+    await dbClearActionLogs();
+    res.json({ success: true, message: "کلیه گزارش‌های فعالیت کاربران با موفقیت پاکسازی شد." });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

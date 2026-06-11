@@ -17,6 +17,7 @@ import { TeensGiftHub } from "./components/TeensGiftHub";
 import { SoccerLiveTracker } from "./components/SoccerLiveTracker";
 import { ParticipantsDashboard } from "./components/ParticipantsDashboard";
 import { AppAdminDashboard } from "./components/AppAdminDashboard";
+import { trackUserAction } from "./utils/tracker";
 import {
   Trophy,
   Sparkles,
@@ -216,7 +217,64 @@ export default function App() {
       localStorage.setItem("wc_predictor_active_effects", JSON.stringify(updated));
       return updated;
     });
+    
+    const effectLabels: Record<string, string> = {
+      vuvuzela: "شیپور گوبوزلا سخنگو 🎺",
+      confetti: "باران فشفشه‌های لیزری زنده ✨",
+      glowingCard: "کارت نقره‌ای کهکشانی 💳"
+    };
+    trackUserAction(`${active ? "فعال‌سازی" : "غیرفعال‌سازی"} افکت کادوی نوجوان شاد: ${effectLabels[effectId] || effectId}`);
   };
+
+  // First render guards for action logs tracking
+  const isFirstRenderActiveTab = React.useRef(true);
+  const isFirstRenderFavTeam = React.useRef(true);
+  const isFirstRenderName = React.useRef(true);
+  const isFirstRenderCampaignChamp = React.useRef(true);
+
+  useEffect(() => {
+    if (isFirstRenderActiveTab.current) {
+      isFirstRenderActiveTab.current = false;
+      return;
+    }
+    const tabLabels: Record<string, string> = {
+      groups: "گروه‌ها و بازی‌ها 📅",
+      standings: "جدول‌های تفکیکی رده‌بندی 📊",
+      knockout: "نمودار مرحله حذفی 🏆",
+      achievements: "نشان‌ها و دستاوردهای من 🏅",
+      participants: "جدول کارشناسی شرکت‌کنندگان 👥",
+      adminDashboard: "پنل مدیریت ابری ⚡"
+    };
+    trackUserAction(`مشاهده بخش: ${tabLabels[activeTab] || activeTab}`);
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (isFirstRenderFavTeam.current) {
+      isFirstRenderFavTeam.current = false;
+      return;
+    }
+    const teamName = favoriteTeam && TEAMS[favoriteTeam] ? TEAMS[favoriteTeam].name : "هیچکدام (بی‌طرف)";
+    trackUserAction(`تغییر تیم محبوب به: ${teamName} ❤️`);
+  }, [favoriteTeam]);
+
+  useEffect(() => {
+    if (isFirstRenderName.current) {
+      isFirstRenderName.current = false;
+      return;
+    }
+    trackUserAction(`تغییر نام کاربری به: ${userName} 👤`);
+  }, [userName]);
+
+  useEffect(() => {
+    if (isFirstRenderCampaignChamp.current) {
+      isFirstRenderCampaignChamp.current = false;
+      return;
+    }
+    if (campaignChamp) {
+      const champName = TEAMS[campaignChamp] ? TEAMS[campaignChamp].name : campaignChamp;
+      trackUserAction(`پیش‌بینی زودهنگام قهرمان نهایی جام جهانی: ${champName} 🏆👑`);
+    }
+  }, [campaignChamp]);
 
   // ----------------------------------------------------
   // 2. PERSISTENCE
@@ -365,6 +423,10 @@ export default function App() {
     setMatches((prev) =>
       prev.map((m) => (m.id === matchId ? { ...m, scoreA, scoreB } : m))
     );
+    const m = matches.find((match) => match.id === matchId);
+    if (m) {
+      trackUserAction(`ثبت پیش‌بینی بازی گروهی ${m.teamA.name} ${scoreA ?? "?"} - ${scoreB ?? "?"} ${m.teamB.name}`);
+    }
   };
 
   const handleSimulateMatch = (matchId: string) => {
@@ -372,6 +434,7 @@ export default function App() {
     if (!match) return;
     const result = simulateMatchScore(match.teamA.strength, match.teamB.strength);
     handleScoreChange(matchId, result.scoreA, result.scoreB);
+    trackUserAction(`شبیه‌سازی ابری تکی بازی: ${match.teamA.name} - ${match.teamB.name} 🎲`);
   };
 
   const handleSimulateGroup = (groupId: string) => {
@@ -385,6 +448,7 @@ export default function App() {
       })
     );
     showNotice(`تمام بازی‌های گروه ${groupId} با توجه به قدرت تیم‌ها شبیه‌سازی شدند! 🎲`);
+    trackUserAction(`شبیه‌سازی دسته جمعی مسابقات گروه ${groupId} 🎲📋`);
   };
 
   const handleSimulateAllGroupMatches = () => {
@@ -395,6 +459,7 @@ export default function App() {
       })
     );
     showNotice("پیش‌بینی تمام مسابقات این ۷۲ بازی گروهی شبیه‌سازی شد! به بخش جدول رده‌بندی نگاه کنید! 🏆✨");
+    trackUserAction("شبیه‌سازی تمام بازی‌های گروهی جام جهانی (۷۲ بازی) 🚀🔮");
   };
 
   const handleResetMatches = () => {
@@ -403,6 +468,7 @@ export default function App() {
       setKnockoutPredictions({});
       setFavoriteTeam(null);
       showNotice("تمام اطلاعات با موفقیت بازنشانی شد 🧹");
+      trackUserAction("پاکسازی و بازنشانی کلیه پیش‌بینی‌ها و مقادیر ذخیره‌شده 🧹❌");
     }
   };
 
@@ -1649,6 +1715,7 @@ export default function App() {
                     ...prev,
                     [matchId]: item,
                   }));
+                  trackUserAction(`ثبت تغییر بازی حذفی ${matchId}`, { ...item });
                 }}
               />
             </motion.div>

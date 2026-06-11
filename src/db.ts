@@ -37,6 +37,7 @@ export interface ShadProfileInput {
 
 const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), "data");
 const PARTICIPANTS_FILE = path.join(DATA_DIR, "participants.json");
+const ACTION_LOGS_FILE = path.join(DATA_DIR, "action_logs.json");
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -160,6 +161,27 @@ async function migrateParticipantsTable() {
   `);
 }
 
+export interface ActionLog {
+  id: string;
+  username: string;
+  action: string;
+  timestamp: string;
+  details?: string;
+}
+
+async function migrateActionLogsTable() {
+  if (!pool) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS action_logs (
+      id VARCHAR(200) PRIMARY KEY,
+      username VARCHAR(255) NOT NULL,
+      action TEXT NOT NULL,
+      timestamp VARCHAR(100) NOT NULL,
+      details TEXT
+    )
+  `);
+}
+
 export async function initDb() {
   if (isDbInitialized) return;
 
@@ -167,6 +189,7 @@ export async function initDb() {
     try {
       console.log("⏳ Initializing database tables in PostgreSQL...");
       await migrateParticipantsTable();
+      await migrateActionLogsTable();
       isDbInitialized = true;
       console.log("❇️ PostgreSQL initialization completed.");
     } catch (err) {
@@ -180,6 +203,9 @@ export async function initDb() {
       ensureDataDir();
       if (!fs.existsSync(PARTICIPANTS_FILE)) {
         fs.writeFileSync(PARTICIPANTS_FILE, "[]", "utf-8");
+      }
+      if (!fs.existsSync(ACTION_LOGS_FILE)) {
+        fs.writeFileSync(ACTION_LOGS_FILE, "[]", "utf-8");
       }
       isDbInitialized = true;
       console.log("❇️ Local file storage initialized successfully.");
@@ -447,5 +473,72 @@ export async function dbBulkSaveParticipants(newList: Participant[]): Promise<bo
   }
 
   fs.writeFileSync(PARTICIPANTS_FILE, JSON.stringify(newList, null, 2), "utf-8");
+  return true;
+}
+
+export async function dbGetActionLogs(): Promise<ActionLog[]> {
+  await initDb();
+  if (pool) {
+    try {
+      const res = await pool.query("SELECT id, username, action, timestamp, details FROM action_logs ORDER BY timestamp DESC, id DESC LIMIT 500");
+      return res.rows.map(row => ({
+        id: row.id,
+        username: row.username,
+        action: row.action,
+        timestamp: row.timestamp,
+        details: row.details ?? undefined
+      }));
+    } catch (err) {
+      console.error("Error reading action_logs from PostgreSQL:", err);
+    }
+  }
+
+  try {
+    if (!fs.existsSync(ACTION_LOGS_FILE)) {
+      return [];
+    }
+    const data = fs.readFileSync(ACTION_LOGS_FILE, "utf-8");
+    const parsed = JSON.parse(data);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    console.error("Error parsing action_logs file:", err);
+    return [];
+  }
+}
+
+export async function dbSaveActionLog(log: ActionLog): Promise<ActionLog> {
+  await initDb();
+  if (pool) {
+    try {
+      await pool.query(
+        "INSERT INTO action_logs (id, username, action, timestamp, details) VALUES ($1, $2, $3, $4, $5)",
+        [log.id, log.username, log.action, log.timestamp, log.details ?? null]
+      );
+      return log;
+    } catch (err) {
+      console.error("Error saving action_log to PostgreSQL:", err);
+    }
+  }
+
+  const list = await dbGetActionLogs();
+  list.unshift(log); // newest first
+  // Limit to 1000 items to keep files small
+  const limited = list.slice(0, 1000);
+  fs.writeFileSync(ACTION_LOGS_FILE, JSON.stringify(limited, null, 2), "utf-8");
+  return log;
+}
+
+export async function dbClearActionLogs(): Promise<boolean> {
+  await initDb();
+  if (pool) {
+    try {
+      await pool.query("DELETE FROM action_logs");
+      return true;
+    } catch (err) {
+      console.error("Error clearing action_logs in PostgreSQL:", err);
+    }
+  }
+
+  fs.writeFileSync(ACTION_LOGS_FILE, JSON.stringify([], null, 2), "utf-8");
   return true;
 }

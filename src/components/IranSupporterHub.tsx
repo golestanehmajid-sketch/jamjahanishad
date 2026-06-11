@@ -8,6 +8,7 @@ import { Team, Match } from "../types";
 import { TeamFlag } from "./TeamFlag";
 import { Heart, Sparkles, Volume2, Flame, Award, Lightbulb, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { trackUserAction } from "../utils/tracker";
 
 interface IranSupporterHubProps {
   iranTeam: Team;
@@ -49,6 +50,7 @@ export const IranSupporterHub: React.FC<IranSupporterHubProps> = ({
     onEnthusiasmChange(Math.min(enthusiasm + 5, 100));
     setDrumActive(true);
     setTimeout(() => setDrumActive(false), 150);
+    trackUserAction("نواختن طبل هواداری در کلوپ یوزپلنگ‌ها 🥁");
 
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -78,6 +80,7 @@ export const IranSupporterHub: React.FC<IranSupporterHubProps> = ({
     onEnthusiasmChange(Math.min(enthusiasm + 8, 100));
     setHornActive(true);
     setTimeout(() => setHornActive(false), 250);
+    trackUserAction("به صدا درآوردن شیپور قهرمانی در کلوپ یوزپلنگ‌ها 🎺");
 
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -244,7 +247,10 @@ export const IranSupporterHub: React.FC<IranSupporterHubProps> = ({
                 id={`chant-dot-${idx}`}
                 key={idx}
                 type="button"
-                onClick={() => setSelectedChant(idx)}
+                onClick={() => {
+                  setSelectedChant(idx);
+                  trackUserAction(`تغییر شعار حماسی سردر کمپ به: ${chants[idx].text}`);
+                }}
                 className={`w-2.5 h-2.5 rounded-full transition-all cursor-pointer ${
                   selectedChant === idx
                     ? "bg-gradient-to-tr from-green-500 to-emerald-400 scale-125 shadow-md shadow-emerald-500/25"
