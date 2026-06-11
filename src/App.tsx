@@ -564,8 +564,14 @@ export default function App() {
   // 4. ACTION HANDLERS
   // ----------------------------------------------------
   const handleScoreChange = (matchId: string, scoreA: number | null, scoreB: number | null) => {
+    // Prevent changing score if match has already started (live or official)
+    const match = matches.find((m) => m.id === matchId);
+    if (match && (match.isLive || match.isOfficial)) {
+      return;
+    }
+    
     setMatches((prev) =>
-      prev.map((m) => (m.id === matchId ? { ...m, scoreA, scoreB } : m))
+      prev.map((m) => (m.id === matchId ? { ...m, scoreA, scoreB, userPredicted: true } : m))
     );
     const m = matches.find((match) => match.id === matchId);
     if (m) {
@@ -576,6 +582,9 @@ export default function App() {
   const handleSimulateMatch = (matchId: string) => {
     const match = matches.find((m) => m.id === matchId);
     if (!match) return;
+    // Prevent simulation if match has already started (live or official)
+    if (match.isLive || match.isOfficial) return;
+    
     const result = simulateMatchScore(match.teamA.strength, match.teamB.strength);
     handleScoreChange(matchId, result.scoreA, result.scoreB);
     trackUserAction(`شبیه‌سازی ابری تکی بازی: ${match.teamA.name} - ${match.teamB.name} 🎲`);
@@ -585,21 +594,25 @@ export default function App() {
     setMatches((prev) =>
       prev.map((m) => {
         if (m.group === groupId) {
+          // Do not overwrite live or official match predictions
+          if (m.isLive || m.isOfficial) return m;
           const result = simulateMatchScore(m.teamA.strength, m.teamB.strength);
-          return { ...m, scoreA: result.scoreA, scoreB: result.scoreB };
+          return { ...m, scoreA: result.scoreA, scoreB: result.scoreB, userPredicted: true };
         }
         return m;
       })
     );
-    showNotice(`تمام بازی‌های گروه ${groupId} با توجه به قدرت تیم‌ها شبیه‌سازی شدند! 🎲`);
+    showNotice(`تمام بازی‌های گروه {groupId} با توجه به قدرت تیم‌ها شبیه‌سازی شدند! 🎲`);
     trackUserAction(`شبیه‌سازی دسته جمعی مسابقات گروه ${groupId} 🎲📋`);
   };
 
   const handleSimulateAllGroupMatches = () => {
     setMatches((prev) =>
       prev.map((m) => {
+        // Do not overwrite live or official match predictions
+        if (m.isLive || m.isOfficial) return m;
         const result = simulateMatchScore(m.teamA.strength, m.teamB.strength);
-        return { ...m, scoreA: result.scoreA, scoreB: result.scoreB };
+        return { ...m, scoreA: result.scoreA, scoreB: result.scoreB, userPredicted: true };
       })
     );
     showNotice("پیش‌بینی تمام مسابقات این ۷۲ بازی گروهی شبیه‌سازی شد! به بخش جدول رده‌بندی نگاه کنید! 🏆✨");
@@ -608,7 +621,15 @@ export default function App() {
 
   const handleResetMatches = () => {
     if (confirm("آیا مطمئن هستید که می‌خواهید تمام پیش‌بینی‌ها را پاک کنید؟")) {
-      setMatches(generateGroupMatches());
+      const freshMatches = generateGroupMatches().map((m) => ({
+        ...m,
+        scoreA: null,
+        scoreB: null,
+        userPredicted: false,
+        isLive: false,
+        isOfficial: false,
+      }));
+      setMatches(freshMatches);
       setKnockoutPredictions({});
       setFavoriteTeam(null);
       showNotice("تمام اطلاعات با موفقیت بازنشانی شد 🧹");
@@ -662,6 +683,34 @@ export default function App() {
                   const goalsA = isReversed ? scraped.guestGoals : scraped.hostGoals;
                   const goalsB = isReversed ? scraped.hostGoals : scraped.guestGoals;
 
+                  // If user has predicted this match, preserve their score but sync status if needed
+                  if (m.userPredicted) {
+                    if (scraped.status === 2 && (!m.isOfficial || m.isLive)) {
+                      changed = true;
+                      return {
+                        ...m,
+                        isOfficial: true,
+                        isLive: false,
+                      };
+                    } else if (scraped.status === 1 && (!m.isLive || m.isOfficial || m.minute !== scraped.minute)) {
+                      changed = true;
+                      return {
+                        ...m,
+                        isOfficial: false,
+                        isLive: true,
+                        minute: scraped.minute || 84,
+                      };
+                    } else if (scraped.status === 3 && (m.isLive || m.isOfficial)) {
+                      changed = true;
+                      return {
+                        ...m,
+                        isOfficial: false,
+                        isLive: false,
+                      };
+                    }
+                    return m;
+                  }
+
                   // scraped.status: 1 = live, 2 = finished, 3 = scheduled
                   if (scraped.status === 2 && (!m.isOfficial || m.scoreA !== goalsA || m.scoreB !== goalsB)) {
                     changed = true;
@@ -681,6 +730,13 @@ export default function App() {
                       isOfficial: false,
                       isLive: true,
                       minute: scraped.minute || 84,
+                    };
+                  } else if (scraped.status === 3 && (m.isLive || m.isOfficial)) {
+                    changed = true;
+                    return {
+                      ...m,
+                      isOfficial: false,
+                      isLive: false,
                     };
                   }
                 }
@@ -1749,45 +1805,41 @@ export default function App() {
                     </div>
 
                     <div className="flex flex-wrap items-center justify-center md:justify-end gap-2 shrink-0">
-                      {!isLiveMode ? (
-                        <>
-                          <button
-                            type="button"
-                            id="simulate-active-day-btn"
-                            onClick={() => {
-                              const dayMatches = matches.filter(m => getMatchDay(m.id) === selectedDay);
-                              dayMatches.forEach(m => handleSimulateMatch(m.id));
-                              if (typeof showNotice === "function") {
-                                showNotice(`🎲 تمام بازی‌های روز ${String(selectedDay).replace(/[0-9]/g, c => "۰۱۲۳۴۵۶۷۸۹"[+c])} با تکیه بر الگوریتم‌های قدرت شبیه‌سازی شدند!`);
-                              } else {
-                                setSimulationNotice(`🎲 تمام بازی‌های روز ${String(selectedDay).replace(/[0-9]/g, c => "۰۱۲۳۴۵۶۷۸۹"[+c])} شبیه‌سازی شدند!`);
-                              }
-                            }}
-                            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-pink-500/10 hover:bg-pink-500/20 text-pink-400 border border-pink-500/25 text-xs font-black duration-150 cursor-pointer active:scale-95 transition-all focus:outline-none"
-                          >
-                            <Dices size={13} />
-                            <span>شبیه‌سازی هوشمند بازی‌های روز {String(selectedDay).replace(/[0-9]/g, c => "۰۱۲۳۴۵۶۷۸۹"[+c])}</span>
-                          </button>
+                      <button
+                        type="button"
+                        id="simulate-active-day-btn"
+                        onClick={() => {
+                          const dayMatches = matches.filter(m => getMatchDay(m.id) === selectedDay);
+                          dayMatches.forEach(m => handleSimulateMatch(m.id));
+                          if (typeof showNotice === "function") {
+                            showNotice(`🎲 تمام بازی‌های روز ${String(selectedDay).replace(/[0-9]/g, c => "۰۱۲۳۴۵۶۷۸۹"[+c])} با تکیه بر الگوریتم‌های قدرت شبیه‌سازی شدند!`);
+                          } else {
+                            setSimulationNotice(`🎲 تمام بازی‌های روز ${String(selectedDay).replace(/[0-9]/g, c => "۰۱۲۳۴۵۶۷۸۹"[+c])} شبیه‌سازی شدند!`);
+                          }
+                        }}
+                        className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-pink-500/10 hover:bg-pink-500/20 text-pink-400 border border-pink-500/25 text-xs font-black duration-150 cursor-pointer active:scale-95 transition-all focus:outline-none"
+                      >
+                        <Dices size={13} />
+                        <span>شبیه‌سازی هوشمند بازی‌های روز {String(selectedDay).replace(/[0-9]/g, c => "۰۱۲۳۴۵۶۷۸۹"[+c])}</span>
+                      </button>
 
-                          <button
-                            type="button"
-                            id="reset-active-day-btn"
-                            onClick={() => {
-                              const dayMatches = matches.filter(m => getMatchDay(m.id) === selectedDay);
-                              dayMatches.forEach(m => handleScoreChange(m.id, null, null));
-                              if (typeof showNotice === "function") {
-                                showNotice(`🔄 پیش‌بینی‌های روز ${String(selectedDay).replace(/[0-9]/g, c => "۰۱۲۳۴۵۶۷۸۹"[+c])} با موفقیت پاک شدند.`);
-                              } else {
-                                setSimulationNotice(`🔄 پیش‌بینی‌های روز ${String(selectedDay).replace(/[0-9]/g, c => "۰۱۲۳۴۵۶۷۸۹"[+c])} حذف شدند.`);
-                              }
-                            }}
-                            className="p-2.5 rounded-xl bg-slate-900 text-slate-400 hover:bg-red-500/20 hover:border-red-500/30 hover:text-red-400 border border-white/5 duration-150 cursor-pointer focus:outline-none transition-all"
-                            title="پاک کردن نتایج مسابقات روز جاری"
-                          >
-                            <RotateCcw size={14} />
-                          </button>
-                        </>
-                      ) : null}
+                      <button
+                        type="button"
+                        id="reset-active-day-btn"
+                        onClick={() => {
+                          const dayMatches = matches.filter(m => getMatchDay(m.id) === selectedDay);
+                          dayMatches.forEach(m => handleScoreChange(m.id, null, null));
+                          if (typeof showNotice === "function") {
+                            showNotice(`🔄 پیش‌بینی‌های روز ${String(selectedDay).replace(/[0-9]/g, c => "۰۱۲۳۴۵۶۷۸۹"[+c])} با موفقیت پاک شدند.`);
+                          } else {
+                            setSimulationNotice(`🔄 پیش‌بینی‌های روز ${String(selectedDay).replace(/[0-9]/g, c => "۰۱۲۳۴۵۶۷۸۹"[+c])} حذف شدند.`);
+                          }
+                        }}
+                        className="p-2.5 rounded-xl bg-slate-900 text-slate-400 hover:bg-red-500/20 hover:border-red-500/30 hover:text-red-400 border border-white/5 duration-150 cursor-pointer focus:outline-none transition-all"
+                        title="پاک کردن نتایج مسابقات روز جاری"
+                      >
+                        <RotateCcw size={14} />
+                      </button>
 
                       <button
                         type="button"
@@ -1866,38 +1918,34 @@ export default function App() {
 
                     {/* Instant Actions for teens */}
                     <div className="flex flex-wrap items-center justify-center gap-2">
-                      {!isLiveMode ? (
-                        <>
-                          <button
-                            id="sim-group-btn"
-                            onClick={() => handleSimulateGroup(selectedGroupFilter)}
-                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-pink-500/10 hover:bg-pink-500/25 text-pink-400 border border-pink-500/30 text-xs font-extrabold duration-150 cursor-pointer active:scale-95 outline-none transition-all"
-                            title="پیش‌بینی شبیه‌سازی برای کل ۶ بازی این گروه"
-                          >
-                            <Dices size={14} />
-                            <span>شبیه‌سازی کل گروه {selectedGroupFilter}</span>
-                          </button>
-                          
-                          <button
-                            id="sim-all-btn"
-                            onClick={handleSimulateAllGroupMatches}
-                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-400 border border-purple-500/30 text-xs font-extrabold duration-150 cursor-pointer active:scale-95 outline-none transition-all"
-                            title="شبیه‌سازی تمام بازی‌های کل مرحله گروهی جام"
-                          >
-                            <Sparkles size={14} />
-                            <span>شبیه‌سازی کل ۷۲ بازی</span>
-                          </button>
+                      <button
+                        id="sim-group-btn"
+                        onClick={() => handleSimulateGroup(selectedGroupFilter)}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-pink-500/10 hover:bg-pink-500/25 text-pink-400 border border-pink-500/30 text-xs font-extrabold duration-150 cursor-pointer active:scale-95 outline-none transition-all"
+                        title="پیش‌بینی شبیه‌سازی برای کل ۶ بازی این گروه"
+                      >
+                        <Dices size={14} />
+                        <span>شبیه‌سازی کل گروه {selectedGroupFilter}</span>
+                      </button>
+                      
+                      <button
+                        id="sim-all-btn"
+                        onClick={handleSimulateAllGroupMatches}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-400 border border-purple-500/30 text-xs font-extrabold duration-150 cursor-pointer active:scale-95 outline-none transition-all"
+                        title="شبیه‌سازی تمام بازی‌های کل مرحله گروهی جام"
+                      >
+                        <Sparkles size={14} />
+                        <span>شبیه‌سازی کل ۷۲ بازی</span>
+                      </button>
 
-                          <button
-                            id="reset-btn"
-                            onClick={handleResetMatches}
-                            className="p-2 rounded-xl bg-slate-900 text-slate-400 hover:bg-red-500/20 hover:border-red-500/30 hover:text-red-400 border border-white/5 duration-150 cursor-pointer outline-none transition-all"
-                            title="پاک کردن تمام نتایج و بازنشانی"
-                          >
-                            <RotateCcw size={14} />
-                          </button>
-                        </>
-                      ) : null}
+                      <button
+                        id="reset-btn"
+                        onClick={handleResetMatches}
+                        className="p-2 rounded-xl bg-slate-900 text-slate-400 hover:bg-red-500/20 hover:border-red-500/30 hover:text-red-400 border border-white/5 duration-150 cursor-pointer outline-none transition-all"
+                        title="پاک کردن تمام نتایج و بازنشانی"
+                      >
+                        <RotateCcw size={14} />
+                      </button>
 
                       <button
                         id="share-btn"

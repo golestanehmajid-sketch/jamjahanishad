@@ -281,6 +281,7 @@ export const IranSupporterHub: React.FC<IranSupporterHubProps> = ({
                     const oppScore = isTeamA_Iran ? m.scoreB : m.scoreA;
 
                     const handleAdjustIran = (diff: number) => {
+                      if (m.isLive || m.isOfficial) return;
                       const currentIran = iranScore !== null ? iranScore : 0;
                       const newVal = Math.min(9, Math.max(0, currentIran + diff));
                       if (isTeamA_Iran) {
@@ -291,6 +292,7 @@ export const IranSupporterHub: React.FC<IranSupporterHubProps> = ({
                     };
 
                     const handleAdjustOpp = (diff: number) => {
+                      if (m.isLive || m.isOfficial) return;
                       const currentOpp = oppScore !== null ? oppScore : 0;
                       const newVal = Math.min(9, Math.max(0, currentOpp + diff));
                       if (isTeamA_Iran) {
@@ -314,11 +316,12 @@ export const IranSupporterHub: React.FC<IranSupporterHubProps> = ({
                         {/* Mid controllers for scorers */}
                         <div className="flex items-center gap-1.5">
                           {/* Iran Score adjustment */}
-                          <div className="flex items-center bg-slate-950 p-1 px-1.5 rounded-md border border-emerald-500/10 gap-1">
+                          <div className={`flex items-center bg-slate-950 p-1 px-1.5 rounded-md border border-emerald-500/10 gap-1 ${m.isLive || m.isOfficial ? "opacity-50" : ""}`}>
                             <button
                               type="button"
+                              disabled={m.isLive || m.isOfficial}
                               onClick={() => handleAdjustIran(-1)}
-                              className="w-4.5 h-4.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 border border-white/5 flex items-center justify-center cursor-pointer active:scale-90 text-[10px]"
+                              className="w-4.5 h-4.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 border border-white/5 flex items-center justify-center cursor-pointer active:scale-90 text-[10px] disabled:opacity-20 disabled:pointer-events-none"
                             >
                               <Minus size={8} strokeWidth={3} />
                             </button>
@@ -327,8 +330,9 @@ export const IranSupporterHub: React.FC<IranSupporterHubProps> = ({
                             </span>
                             <button
                               type="button"
+                              disabled={m.isLive || m.isOfficial}
                               onClick={() => handleAdjustIran(1)}
-                              className="w-4.5 h-4.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 border border-white/5 flex items-center justify-center cursor-pointer active:scale-90 text-[10px]"
+                              className="w-4.5 h-4.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 border border-white/5 flex items-center justify-center cursor-pointer active:scale-90 text-[10px] disabled:opacity-20 disabled:pointer-events-none"
                             >
                               <Plus size={8} strokeWidth={3} />
                             </button>
@@ -337,11 +341,12 @@ export const IranSupporterHub: React.FC<IranSupporterHubProps> = ({
                           <span className="text-[9px] text-slate-500 font-bold">:</span>
 
                           {/* Opponent Score adjustment */}
-                          <div className="flex items-center bg-slate-950 p-1 px-1.5 rounded-md border border-red-500/10 gap-1">
+                          <div className={`flex items-center bg-slate-950 p-1 px-1.5 rounded-md border border-red-500/10 gap-1 ${m.isLive || m.isOfficial ? "opacity-50" : ""}`}>
                             <button
                               type="button"
+                              disabled={m.isLive || m.isOfficial}
                               onClick={() => handleAdjustOpp(-1)}
-                              className="w-4.5 h-4.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 border border-white/5 flex items-center justify-center cursor-pointer active:scale-90 text-[10px]"
+                              className="w-4.5 h-4.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 border border-white/5 flex items-center justify-center cursor-pointer active:scale-90 text-[10px] disabled:opacity-20 disabled:pointer-events-none"
                             >
                               <Minus size={8} strokeWidth={3} />
                             </button>
@@ -350,8 +355,9 @@ export const IranSupporterHub: React.FC<IranSupporterHubProps> = ({
                             </span>
                             <button
                               type="button"
+                              disabled={m.isLive || m.isOfficial}
                               onClick={() => handleAdjustOpp(1)}
-                              className="w-4.5 h-4.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 border border-white/5 flex items-center justify-center cursor-pointer active:scale-90 text-[10px]"
+                              className="w-4.5 h-4.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 border border-white/5 flex items-center justify-center cursor-pointer active:scale-90 text-[10px] disabled:opacity-20 disabled:pointer-events-none"
                             >
                               <Plus size={8} strokeWidth={3} />
                             </button>

@@ -140,8 +140,8 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
                 setIsDrawerOpen(true);
               }
             }}
-            className={`flex items-center justify-between bg-slate-950/40 p-3.5 rounded-xl border border-white/5 active:bg-slate-950/60 transition-all cursor-pointer ${
-              !isOfficial && !isLive ? "hover:border-purple-500/30" : ""
+            className={`flex items-center justify-between bg-slate-950/40 p-3.5 rounded-xl border border-white/5 active:bg-slate-950/60 transition-all ${
+              !isOfficial && !isLive ? "cursor-pointer hover:border-purple-500/30" : "cursor-not-allowed opacity-80"
             }`}
           >
             {/* Team stack list left side */}
@@ -169,10 +169,14 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
                   {scoreB !== null ? toPersianDigits(scoreB) : "—"}
                 </span>
               </div>
-              {!isOfficial && !isLive && (
+              {!isOfficial && !isLive ? (
                 <span className="text-[9.5px] text-purple-400 mt-1 font-bold Persian-font flex items-center gap-0.5 justify-center">
                   <Edit3 size={9} />
                   <span>ثبت امتیاز</span>
+                </span>
+              ) : (
+                <span className="text-[9.5px] text-slate-500 mt-1 font-bold Persian-font flex items-center gap-0.5 justify-center">
+                  🔒 قفل شده
                 </span>
               )}
             </div>
@@ -207,7 +211,7 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
                   type="button"
                   disabled={isOfficial || isLive}
                   onClick={() => handleDecrement("A")}
-                  className="w-10 h-10 rounded-xl bg-slate-900 border border-white/10 text-slate-300 hover:text-red-400 hover:border-red-500/30 hover:bg-slate-800 flex items-center justify-center cursor-pointer active:scale-95 disabled:pointer-events-none disabled:opacity-20 transition-all font-bold"
+                  className="w-10 h-10 rounded-xl bg-slate-900 border border-white/10 text-slate-300 hover:text-red-400 hover:border-red-500/30 hover:bg-slate-800 flex items-center justify-center cursor-pointer active:scale-95 disabled:pointer-events-none disabled:opacity-25 transition-all font-bold"
                   title="کاهش گل میزبان"
                 >
                   <Minus size={16} />
@@ -225,7 +229,7 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
                   type="button"
                   disabled={isOfficial || isLive}
                   onClick={() => handleIncrement("A")}
-                  className="w-10 h-10 rounded-xl bg-slate-900 border border-white/10 text-slate-300 hover:text-purple-400 hover:border-purple-500/30 hover:bg-slate-800 flex items-center justify-center cursor-pointer active:scale-95 disabled:pointer-events-none disabled:opacity-20 transition-all font-bold"
+                  className="w-10 h-10 rounded-xl bg-slate-900 border border-white/10 text-slate-300 hover:text-purple-400 hover:border-purple-500/30 hover:bg-slate-800 flex items-center justify-center cursor-pointer active:scale-95 disabled:pointer-events-none disabled:opacity-25 transition-all font-bold"
                   title="افزایش گل میزبان"
                 >
                   <Plus size={16} />
@@ -240,7 +244,7 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
                   type="button"
                   disabled={isOfficial || isLive}
                   onClick={() => handleDecrement("B")}
-                  className="w-10 h-10 rounded-xl bg-slate-900 border border-white/10 text-slate-300 hover:text-red-400 hover:border-red-500/30 hover:bg-slate-800 flex items-center justify-center cursor-pointer active:scale-95 disabled:pointer-events-none disabled:opacity-20 transition-all font-bold"
+                  className="w-10 h-10 rounded-xl bg-slate-900 border border-white/10 text-slate-300 hover:text-red-400 hover:border-red-500/30 hover:bg-slate-800 flex items-center justify-center cursor-pointer active:scale-95 disabled:pointer-events-none disabled:opacity-25 transition-all font-bold"
                   title="کاهش گل مهمان"
                 >
                   <Minus size={16} />
@@ -258,7 +262,7 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
                   type="button"
                   disabled={isOfficial || isLive}
                   onClick={() => handleIncrement("B")}
-                  className="w-10 h-10 rounded-xl bg-slate-900 border border-white/10 text-slate-300 hover:text-purple-400 hover:border-purple-500/30 hover:bg-slate-800 flex items-center justify-center cursor-pointer active:scale-95 disabled:pointer-events-none disabled:opacity-20 transition-all font-bold"
+                  className="w-10 h-10 rounded-xl bg-slate-900 border border-white/10 text-slate-300 hover:text-purple-400 hover:border-purple-500/30 hover:bg-slate-800 flex items-center justify-center cursor-pointer active:scale-95 disabled:pointer-events-none disabled:opacity-25 transition-all font-bold"
                   title="افزایش گل مهمان"
                 >
                   <Plus size={16} />
@@ -325,8 +329,8 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
                 <span>شبیه‌سازی هوشمند</span>
               </button>
             ) : (
-              <span className="text-[10px] text-slate-500 select-none">
-                محاسبه زنده در جدول رده‌بندی
+              <span className="text-[10.5px] text-slate-500 select-none font-bold Persian-font">
+                🔒 شروع مسابقه (پیش‌بینی قفل شده)
               </span>
             )}
           </div>

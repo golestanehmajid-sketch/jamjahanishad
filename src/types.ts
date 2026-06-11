@@ -24,6 +24,7 @@ export interface Match {
   isOfficial?: boolean; // Locked official scores
   isLive?: boolean; // Currently active match
   minute?: number; // Simulated live match minute
+  userPredicted?: boolean; // User manually set this score
 }
 
 export interface Group {
