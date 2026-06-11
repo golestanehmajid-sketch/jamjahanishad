@@ -46,7 +46,11 @@ import {
   Settings,
   Gift,
   Search,
-  X
+  X,
+  Smartphone,
+  Watch,
+  Headphones,
+  Wifi
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -161,11 +165,16 @@ export default function App() {
   });
 
   const [userName, setUserName] = useState<string>(() => {
-    return localStorage.getItem("wc_predictor_username") || "قهرمان جوان";
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const urlName = params.get("username") || params.get("UserName") || params.get("name") || params.get("fullname") || params.get("student_name");
+      if (urlName) {
+        localStorage.setItem("wc_predictor_username", urlName);
+        return urlName;
+      }
+    }
+    return localStorage.getItem("wc_predictor_username") || "کاربر شاد";
   });
-
-  const [isEditingName, setIsEditingName] = useState(false);
-  const [tempName, setTempName] = useState(userName);
 
   // ----------------------------------------------------
   // 🇮🇷 SHAD Webapp Integration Mechanism (Technical PDF Specs Part 3)
@@ -198,7 +207,6 @@ export default function App() {
             const fullname = `${res.data.name || ""} ${res.data.family || ""}`.trim();
             if (fullname) {
               setUserName(fullname);
-              setTempName(fullname);
               localStorage.setItem("wc_predictor_username", fullname);
             }
 
@@ -695,13 +703,7 @@ export default function App() {
 
 
 
-  const handleSaveName = () => {
-    if (tempName.trim()) {
-      setUserName(tempName.trim());
-      setIsEditingName(false);
-      showNotice(`نام کاربری با موفقیت به "${tempName}" تغییر یافت 👤`);
-    }
-  };
+
 
   const getSafeOrigin = () => {
     if (typeof window === "undefined") return "";
@@ -985,156 +987,190 @@ export default function App() {
             </div>
           </div>
 
-          {/* User Nickname & Edit Tool */}
+          {/* User Nickname (Authentic Shad Identity Badge - Read Only) */}
           <div className="flex items-center gap-2 flex-wrap">
-            <div id="user-profile-widget" className="flex items-center gap-2.5 bg-slate-900/80 p-1.5 px-3 rounded-2xl border border-white/5 shadow">
-            <User size={15} className="text-slate-400" />
-            {isEditingName ? (
-              <div className="flex items-center gap-1">
-                <input
-                  id="user-name-input"
-                  type="text"
-                  maxLength={16}
-                  value={tempName}
-                  onChange={(e) => setTempName(e.target.value)}
-                  className="bg-slate-800 text-white rounded-lg px-2 py-0.5 text-xs font-semibold w-24 border border-purple-500/70 focus:outline-none"
-                />
-                <button
-                  id="save-user-name"
-                  onClick={handleSaveName}
-                  className="p-1 rounded bg-gradient-to-r from-pink-500 to-purple-500 text-white hover:from-pink-400 hover:to-purple-400 duration-150 cursor-pointer"
-                >
-                  <Check size={12} />
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-100 select-none Persian-font flex items-center gap-1">
-                  {activeEffects.gift_crown && <span className="text-xs animate-bounce" title="تاج امپراتوری پیش‌گویان">👑</span>}
-                  <span>{activeEffects.gift_avatar ? `✨ خبرنگار طلایی ${userName} ✨` : userName}</span>
+            <div id="user-profile-widget" className="flex items-center gap-2.5 bg-slate-900/80 p-1.5 px-3.5 rounded-2xl border border-emerald-500/10 shadow-md">
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${fromShad ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
+                <span className={`relative inline-flex rounded-full h-2 w-2 ${fromShad ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
+              </span>
+              <User size={13} className="text-slate-400 shrink-0" />
+              <span className="text-xs font-extrabold text-slate-100 select-none Persian-font flex items-center gap-1.5 max-w-[180px] truncate">
+                {activeEffects.gift_crown && <span className="text-xs animate-bounce" title="تاج امپراتوری پیش‌گویان">👑</span>}
+                <span>{activeEffects.gift_avatar ? `✨ خبرنگار طلایی ${userName} ✨` : userName}</span>
+              </span>
+              {fromShad && (
+                <span className="text-[10px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-full select-none Persian-font shrink-0 scale-90">
+                  تایید شده شاد ✅
                 </span>
-                <button
-                  id="edit-user-name"
-                  onClick={() => setIsEditingName(true)}
-                  className="text-slate-400 hover:text-white cursor-pointer"
-                  title="ویرایش نام"
-                >
-                  <Edit2 size={11} />
-                </button>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
           </div>
         </div>
       </header>
 
       {/* ----------------- DAILY PREDICTION & SHADQ PROMO BANNER ----------------- */}
       <section id="daily-prediction-promo" className="max-w-6xl mx-auto w-full px-4 pt-6 animate-fade-in">
-        <div className="relative overflow-hidden rounded-3xl border border-pink-500/25 bg-gradient-to-r from-pink-500/10 via-purple-600/10 to-indigo-600/10 backdrop-blur-md p-5 sm:p-6 shadow-xl shadow-purple-900/10">
+        <div className="relative overflow-hidden rounded-3xl border border-white/15 bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950/90 backdrop-blur-xl p-6 sm:p-8 shadow-2xl shadow-indigo-950/40 group transition-all duration-300 hover:border-indigo-500/30">
           
-          {/* Glowing Ambient Background Circles */}
-          <div className="absolute top-0 right-10 w-44 h-44 bg-pink-500/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute bottom-0 left-10 w-44 h-44 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+          {/* Shifting Gradient Aura */}
+          <div className="absolute top-0 right-1/4 w-80 h-80 bg-pink-500/10 rounded-full blur-[100px] pointer-events-none animate-pulse" />
+          <div className="absolute bottom-0 left-1/4 w-85 h-85 bg-blue-600/10 rounded-full blur-[120px] pointer-events-none animate-pulse duration-4000" />
           
-          <div className="flex flex-col md:flex-row items-center justify-between gap-5 relative z-10 w-full">
-            <div className="flex items-center gap-4 flex-col sm:flex-row text-center sm:text-right w-full md:w-auto">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-pink-500 via-purple-500 to-indigo-500 text-white shadow-lg shadow-purple-500/30">
-                <motion.div
-                  animate={{
-                    scale: [1, 1.15, 1],
-                    rotate: [0, 5, -5, 0],
-                  }}
-                  transition={{
-                    duration: 2.5,
-                    repeat: Infinity,
-                    ease: "easeInOut"
-                  }}
-                >
-                  <Gift size={28} className="text-yellow-200" />
-                </motion.div>
-              </div>
-              <div>
-                <h3 className="text-lg sm:text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-pink-200 to-purple-300 tracking-tight Persian-font leading-normal">
-                  پیش بینی کن و گوشی تلفن همراه برنده شو! 📱✨
+          {/* Subtle Grid overlay for technical high-end feel */}
+          <div className="absolute inset-0 bg-[radial-gradient(#ffffff03_1px,transparent_1px)] [background-size:16px_16px] opacity-70 pointer-events-none" />
+
+          <div className="flex flex-col lg:flex-row items-center justify-between gap-8 relative z-10 w-full">
+            
+            {/* Right side: Detailed Information & Badges */}
+            <div className="flex flex-col items-center lg:items-start text-center lg:text-right gap-4 flex-1 w-full">
+              {/* Main Headline */}
+              <div className="space-y-2">
+                <h3 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight leading-normal Persian-font text-white">
+                  پیش‌بینی کن و برنده شو! 📱🏆
                 </h3>
-                <p className="text-xs sm:text-sm font-bold text-slate-200 text-white/90 mt-1.5 Persian-font">
-                  هم مسابقه شادکیو داریم هم قرعه کشی و کلی جایزه روزانه
-                </p>
-                <p className="text-[10px] sm:text-xs text-slate-400 mt-1 select-none font-medium">
-                  مسابقات آنلاین هیجان‌انگیز، پیش‌بینی مسابقات فوتبال و شانس برنده شدن جوایز شگفت‌انگیز روزانه!
-                </p>
               </div>
+
+              {/* Horizontal / Wrapped Pill Badges of the exact prize tier */}
+              <div className="flex flex-wrap gap-2.5 justify-center lg:justify-start w-full mt-2">
+                <div className="flex items-center gap-1.5 text-xs font-bold leading-normal px-3.5 py-2 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-300 Persian-font shadow-inner">
+                  <Smartphone size={14} className="shrink-0" />
+                  <span>۳ گوشی هوشمند جدید (نفرات ۱ تا ۳ جدول)</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs font-bold leading-normal px-3.5 py-2 rounded-2xl bg-blue-505/10 border border-blue-500/20 text-blue-300 Persian-font shadow-inner">
+                  <Watch size={14} className="shrink-0" />
+                  <span>ساعت هوشمند دیجیتال</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs font-bold leading-normal px-3.5 py-2 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-300 Persian-font shadow-inner">
+                  <Headphones size={14} className="shrink-0" />
+                  <span>هدفون بی‌سیم مدرن</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs font-bold leading-normal px-3.5 py-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 Persian-font shadow-inner">
+                  <Wifi size={14} className="shrink-0" />
+                  <span>اینترنت پرسرعت همراه و جوایز نقدی پویا</span>
+                </div>
+              </div>
+
+              {/* Quick interactive note */}
+              <p className="text-[11px] text-slate-400 select-none font-bold Persian-font flex items-center gap-1.5 mt-1 sm:mt-2">
+                <Sparkles size={12} className="text-pink-400 animate-spin" />
+                رایگان، بدون قرعه‌کشی برای رده‌های ممتاز جدول + قرعه‌کشی روزانه برای همه شرکت‌کنندگان
+              </p>
             </div>
             
-            <div className="shrink-0 flex items-center justify-center w-full md:w-auto relative px-4 select-none">
-              <div className="relative w-28 h-16 flex items-center justify-center">
-                {/* Sparkle background elements */}
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
-                  className="absolute text-yellow-300 opacity-60 pointer-events-none -top-1 -left-1"
-                >
-                  <Sparkles size={16} />
-                </motion.div>
+            {/* Left side: Premium 3D Interactive Mock Smartphone & Floating Trophy */}
+            <div className="shrink-0 flex items-center justify-center w-full lg:w-auto relative px-4 select-none mt-4 lg:mt-0">
+              <div className="relative w-44 h-56 flex items-center justify-center">
                 
+                {/* Ambient glow behind the phone mockup */}
+                <div className="absolute inset-0 bg-indigo-500/20 blur-3xl rounded-full scale-110 pointer-events-none animate-pulse" />
+
+                {/* Sparkling Background Nodes */}
                 <motion.div
-                  animate={{ rotate: -360 }}
-                  transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
-                  className="absolute text-pink-400 opacity-55 pointer-events-none -bottom-2 -right-1"
+                  animate={{ rotate: 360, scale: [0.9, 1.1, 0.9] }}
+                  transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
+                  className="absolute text-yellow-300 opacity-70 pointer-events-none top-2 left-2"
                 >
-                  <Sparkles size={12} />
+                  <Sparkles size={18} />
+                </motion.div>
+                <motion.div
+                  animate={{ rotate: -360, scale: [1, 0.85, 1] }}
+                  transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+                  className="absolute text-pink-400 opacity-60 pointer-events-none bottom-4 right-0"
+                >
+                  <Sparkles size={14} />
                 </motion.div>
 
-                {/* Animated Awards Cluster */}
-                {/* 1. Award badge (Left side) */}
+                {/* 3D-angled Glassmorphic Smartphone Model */}
                 <motion.div
                   animate={{ 
-                    y: [2, -4, 2],
-                    rotate: [-5, 5, -5]
+                    y: [-6, 6, -6],
+                    rotateY: [-12, -4, -12],
+                    rotateX: [6, 12, 6]
                   }}
+                  style={{ perspective: 1000 }}
                   transition={{ 
-                    duration: 3.5, 
+                    duration: 5, 
                     repeat: Infinity, 
                     ease: "easeInOut" 
                   }}
-                  className="absolute left-3 bottom-1.5 flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 shadow-md transform -rotate-12 z-0"
+                  className="w-32 h-52 rounded-[2.2rem] bg-slate-900 border-4 border-slate-700/70 p-2 shadow-2xl relative z-20 flex flex-col justify-between overflow-hidden cursor-pointer hover:border-pink-500/50 hover:shadow-indigo-500/25 transition-all duration-300 group-hover:scale-105"
                 >
-                  <Award size={20} />
+                  {/* Speaker Notch */}
+                  <div className="absolute top-1.5 left-1/2 -translate-x-1/2 w-12 h-3.5 rounded-full bg-slate-800 z-30 flex items-center justify-center">
+                    <div className="w-6 h-1 rounded-full bg-slate-700" />
+                  </div>
+
+                  {/* Shaky screen-glow behind elements inside the phone screen */}
+                  <div className="absolute inset-0 bg-gradient-to-b from-indigo-950 via-slate-950 to-purple-950 z-0" />
+                  <div className="absolute -top-12 -right-12 w-24 h-24 bg-pink-500/20 rounded-full blur-xl pointer-events-none animate-pulse" />
+                  <div className="absolute -bottom-12 -left-12 w-24 h-24 bg-blue-500/20 rounded-full blur-xl pointer-events-none animate-pulse duration-3000" />
+
+                  {/* Screensaver content with Grid Pattern */}
+                  <div className="relative w-full h-full rounded-[1.8rem] overflow-hidden bg-slate-950/65 flex flex-col items-center justify-center gap-1 z-10 border border-white/5 p-1.5">
+                    {/* Tiny Stadium Grid Lines */}
+                    <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff02_1px,transparent_1px),linear-gradient(to_bottom,#ffffff02_1px,transparent_1px)] bg-[size:12px_12px] opacity-80" />
+                    
+                    {/* Jumping Football */}
+                    <motion.div 
+                      animate={{ y: [4, -14, 4], rotate: [0, 180, 360] }}
+                      transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}
+                      className="text-2xl drop-shadow-xl z-10"
+                    >
+                      ⚽
+                    </motion.div>
+
+                    {/* Floating Golden Trophy standing tall inside the screen */}
+                    <motion.div
+                      animate={{ 
+                        scale: [1, 1.12, 1],
+                        rotate: [-4, 4, -4]
+                      }}
+                      transition={{ 
+                        duration: 2.8, 
+                        repeat: Infinity, 
+                        ease: "easeInOut" 
+                      }}
+                      className="w-12 h-12 flex items-center justify-center rounded-xl bg-gradient-to-tr from-yellow-400 to-amber-500 text-slate-950 shadow-md border border-yellow-200/30 z-20 mt-1"
+                    >
+                      <Trophy size={20} className="drop-shadow" />
+                    </motion.div>
+
+                    {/* Miniature live-rank card */}
+                    <span className="text-[8px] font-black tracking-tight text-yellow-300 bg-yellow-500/10 px-2 py-0.5 rounded-full border border-yellow-500/20 uppercase mt-2 Persian-font scale-90">
+                      رتبه ۱ تا ۳ لیدربورد 🏆
+                    </span>
+                  </div>
                 </motion.div>
 
-                {/* 2. Gift box (Right side) */}
+                {/* Additional floating medals behind the 3D Phone to add depth */}
+                {/* 1. Purple medal (left side) */}
                 <motion.div
                   animate={{ 
-                    y: [4, -2, 4],
-                    rotate: [5, -5, 5]
+                    y: [0, -8, 0],
+                    rotate: [-15, -5, -15]
                   }}
-                  transition={{ 
-                    duration: 3, 
-                    repeat: Infinity, 
-                    ease: "easeInOut" 
-                  }}
-                  className="absolute right-3 bottom-1 flex h-10 w-10 items-center justify-center rounded-xl bg-pink-500/20 border border-pink-500/30 text-pink-300 shadow-md transform rotate-12 z-0"
+                  transition={{ duration: 4.2, repeat: Infinity, ease: "easeInOut" }}
+                  className="absolute -left-4 bottom-8 flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 shadow-lg backdrop-blur-sm z-10"
                 >
-                  <Gift size={18} className="text-pink-300" />
+                  <Award size={20} className="text-indigo-400" />
                 </motion.div>
 
-                {/* 3. Golden Trophy (Center & Front) */}
+                {/* 2. Pink gift (right side) */}
                 <motion.div
                   animate={{ 
-                    y: [-6, 2, -6],
-                    scale: [1, 1.05, 1],
+                    y: [6, -4, 6],
+                    rotate: [15, 5, 15]
                   }}
-                  transition={{ 
-                    duration: 2.8, 
-                    repeat: Infinity, 
-                    ease: "easeInOut" 
-                  }}
-                  className="absolute bottom-2 h-14 w-14 flex items-center justify-center rounded-2xl bg-gradient-to-tr from-yellow-400 via-amber-500 to-yellow-300 text-slate-950 shadow-lg shadow-amber-500/40 z-10 border border-yellow-200/40"
+                  transition={{ duration: 3.8, repeat: Infinity, ease: "easeInOut" }}
+                  className="absolute -right-4 bottom-6 flex h-11 w-11 items-center justify-center rounded-2xl bg-pink-500/20 border border-pink-500/30 text-pink-300 shadow-lg backdrop-blur-sm z-10"
                 >
-                  <Trophy size={28} className="drop-shadow-md" />
+                  <Gift size={20} className="text-pink-400" />
                 </motion.div>
+
               </div>
             </div>
+
           </div>
         </div>
       </section>

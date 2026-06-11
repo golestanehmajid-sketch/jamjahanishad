@@ -73,10 +73,10 @@ export const RulesAndPrizes: React.FC = () => {
               🎯 جوایز شگفت‌انگیز و هدایای مدرن
             </div>
             <h1 className="text-2xl sm:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-indigo-200 to-purple-300 tracking-tight Persian-font leading-normal">
-              راهنما و جوایز ارزشمند پیش‌بینی جام جهانی ۲۰۲۶
+              راهنما و جوایز جام جهانی ۲۰۲۶
             </h1>
             <p className="text-xs sm:text-sm text-slate-400 font-bold Persian-font max-w-2xl leading-relaxed">
-              با پیش‌بینی صحیح مسابقات جام جهانی، شانس خود را برای دریافت یکی از ۳ گوشی همراه برتر، ساعتهای هوشمند، هندزفری‌های بی‌سیم و صدها جایزه و بسته اینترنت روزانه افزایش دهید!
+              پیش‌بینی کنید، به رتبه‌های برتر لیدربورد برسید و هدایای ارزشمند برنده شوید!
             </p>
           </div>
           <div className="flex -space-x-4 space-x-reverse relative select-none">

@@ -170,6 +170,470 @@ app.post("/api/participants/register-shad", async (req, res) => {
   }
 });
 
+// 📌 TECHNICAL LOGS VIEWER DASHBOARD
+app.get("/technical-logs", async (req, res) => {
+  try {
+    const list = await dbGetActionLogs();
+    const participantsList = await dbGetParticipants();
+    
+    // Dynamic statistics for system overview
+    const totalLogs = list.length;
+    const totalParticipants = participantsList.length;
+    
+    const uptime = Math.round(process.uptime());
+    const hours = Math.floor(uptime / 3600);
+    const minutes = Math.floor((uptime % 3600) / 60);
+    const seconds = uptime % 60;
+    const uptimeStr = `${hours}h ${minutes}m ${seconds}s`;
+    
+    const memory = process.memoryUsage();
+    const rssMB = (memory.rss / 1024 / 1024).toFixed(1);
+    const heapUsedMB = (memory.heapUsed / 1024 / 1024).toFixed(1);
+    
+    const isPostgres = !!(process.env.DATABASE_URL || process.env.POSTGRES_URL);
+    const dbEngine = isPostgres ? "PostgreSQL (Cloud SQL)" : "File Storage (local JSON)";
+    
+    const shadConfigured = !!(process.env.SHAD_LANDING_ID && process.env.SHAD_USERNAME && process.env.SHAD_PASSWORD);
+    
+    // Generate beautiful custom HTML
+    const html = `
+    <!DOCTYPE html>
+    <html lang="fa" dir="rtl">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>کنسول لاگ فنی و پایش وضعیت سیستم</title>
+      <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+      <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;700;900&family=Fira+Code:wght@400;500;700&display=swap" rel="stylesheet">
+      <style>
+        body {
+          font-family: 'Vazirmatn', 'Inter', sans-serif;
+          background-color: #030712;
+        }
+        .code-font {
+          font-family: 'Fira Code', 'Courier New', monospace;
+        }
+        ::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+          background: #030712;
+        }
+        ::-webkit-scrollbar-thumb {
+          background: #1f2937;
+          border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+          background: #374151;
+        }
+      </style>
+    </head>
+    <body class="text-slate-100 min-h-screen p-4 sm:p-6 lg:p-8 selection:bg-pink-500 selection:text-white">
+      
+      <!-- Top Cyberpunk/Sleek Header -->
+      <div class="max-w-7xl mx-auto mb-8">
+        <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 bg-slate-900/60 border border-slate-800 rounded-3xl p-6 backdrop-blur-md relative overflow-hidden">
+          <div class="absolute -top-10 -right-10 w-32 h-32 bg-pink-500/10 rounded-full blur-3xl"></div>
+          <div class="absolute -bottom-10 -left-10 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl"></div>
+          
+          <div class="relative z-10 flex items-center gap-4">
+            <div class="h-14 w-14 shrink-0 rounded-2xl bg-gradient-to-tr from-pink-500 via-purple-500 to-indigo-500 flex items-center justify-center text-white shadow-lg shadow-purple-500/25">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 animate-pulse text-yellow-100" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span class="text-xs font-bold text-slate-400">سیستم آنلاین مانیتورینگ شادکیو</span>
+              </div>
+              <h1 class="text-xl sm:text-2xl font-black text-white mt-1">کنسول مرکزی پایش و لاگ‌های فنی</h1>
+              <p class="text-xs text-slate-400 mt-1">امکان دسترسی زنده به گزارش‌های تفصیلی فعالیت تمامی کلاینت‌ها و کاربران برای مدیریت سیستم</p>
+            </div>
+          </div>
+          
+          <div class="flex items-center gap-3 relative z-10">
+            <button onclick="window.location.reload()" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border border-slate-700">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 11H15V20l-3-3" />
+              </svg>
+              <span>تازه‌سازی سریع</span>
+            </button>
+            <button onclick="clearLogsOnServer()" class="px-4 py-2.5 rounded-xl bg-red-950/20 hover:bg-red-950/40 text-red-400 text-xs font-bold transition-all border border-red-900/30 flex items-center gap-2 cursor-pointer">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              <span>پاکسازی کل تاریخچه (Reset)</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Metrics Grid -->
+      <div class="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        
+        <!-- Metric 1: Database Status -->
+        <div class="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-5 flex items-center gap-4">
+          <div class="p-3.5 rounded-xl bg-indigo-500/10 text-indigo-400">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+            </svg>
+          </div>
+          <div>
+            <span class="block text-[11px] text-slate-500 font-bold mb-0.5">موتور ذخیره‌سازی ابری</span>
+            <span class="text-sm font-black text-indigo-400">${dbEngine}</span>
+          </div>
+        </div>
+        
+        <!-- Metric 2: Logs count -->
+        <div class="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-5 flex items-center gap-4">
+          <div class="p-3.5 rounded-xl bg-pink-500/10 text-pink-400">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <div>
+            <span class="block text-[11px] text-slate-500 font-bold mb-0.5">تعداد کل گزارش فعالیت‌ها</span>
+            <span class="text-sm font-black text-pink-400 font-mono" id="stats-total-logs">${totalLogs} رکورد فعال</span>
+          </div>
+        </div>
+        
+        <!-- Metric 3: Active Participants -->
+        <div class="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-5 flex items-center gap-4">
+          <div class="p-3.5 rounded-xl bg-yellow-500/10 text-yellow-400">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+          </div>
+          <div>
+            <span class="block text-[11px] text-slate-500 font-bold mb-0.5">شرکت‌کنندگان لیدربورد</span>
+            <span class="text-sm font-black text-yellow-400 font-mono">${totalParticipants} شرکت‌کننده</span>
+          </div>
+        </div>
+        
+        <!-- Metric 4: Health Metrics (Memory & Uptime) -->
+        <div class="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-5 flex items-center gap-4">
+          <div class="p-3.5 rounded-xl bg-emerald-500/10 text-emerald-400">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <div class="overflow-hidden">
+            <span class="block text-[11px] text-slate-500 font-bold mb-0.5">Uptime: ${uptimeStr}</span>
+            <span class="text-[11px] font-black text-emerald-400 font-mono text-xs block truncate" title="RSS: ${rssMB}MB / Heap: ${heapUsedMB}MB">RAM: ${rssMB} MB</span>
+          </div>
+        </div>
+        
+      </div>
+      
+      <!-- Live Configuration Status Segment -->
+      <div class="max-w-7xl mx-auto mb-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="bg-slate-900/30 border border-slate-800/60 rounded-2xl p-5 space-y-3">
+          <h3 class="text-xs font-black text-slate-300 flex items-center gap-2">
+            <span class="h-1.5 w-1.5 rounded-full bg-violet-400"></span>
+            تنظیمات و متغیرهای پیکربندی ابری شاد
+          </h3>
+          <div class="grid grid-cols-2 gap-3 text-xs">
+            <div class="bg-slate-950 p-2.5 rounded-xl border border-white/5">
+              <span class="text-slate-500 font-bold block mb-1">شناسه رویداد لندینگ (SHAD_LANDING_ID)</span>
+              <span class="font-mono text-slate-300">${process.env.SHAD_LANDING_ID || "تعریف نشده [شبیه‌ساز فعال]"}</span>
+            </div>
+            <div class="bg-slate-950 p-2.5 rounded-xl border border-white/5">
+              <span class="text-slate-500 font-bold block mb-1">سرویس شاد (SHAD_API)</span>
+              <span class="${shadConfigured ? 'text-emerald-400' : 'text-amber-400'} font-bold">${shadConfigured ? "متصل به وب‌سرویس اصلی" : "فعال در حالت دمو پیش‌فرض"}</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="bg-slate-900/30 border border-slate-800/60 rounded-2xl p-5 space-y-3">
+          <h3 class="text-xs font-black text-slate-300 flex items-center gap-2">
+            <span class="h-1.5 w-1.5 rounded-full bg-pink-400"></span>
+            پشتیبان سرویس‌ها و همگام‌ساز‌ها
+          </h3>
+          <div class="grid grid-cols-2 gap-3 text-xs">
+            <div class="bg-slate-950 p-2.5 rounded-xl border border-white/5">
+              <span class="text-slate-500 font-bold block mb-1">Node Environment</span>
+              <span class="font-mono text-slate-300">${process.env.NODE_ENV || "development"}</span>
+            </div>
+            <div class="bg-slate-950 p-2.5 rounded-xl border border-white/5">
+              <span class="text-slate-500 font-bold block mb-1">Port</span>
+              <span class="font-mono text-slate-300">${PORT}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Interactive Table Container -->
+      <div class="max-w-7xl mx-auto">
+        <div class="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+          
+          <!-- Filters & Actions Header bar -->
+          <div class="p-5 border-b border-slate-800 bg-slate-900/60 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+            <div class="flex items-center gap-3 flex-1">
+              <div class="relative w-full max-w-sm">
+                <span class="absolute right-3.5 top-3 text-slate-500">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </span>
+                <input type="text" id="log-search-input" onkeyup="filterLogsList()" placeholder="جستجو بر اساس نام کاربر، شناسه، اکشن یا جزئیات..." class="w-full bg-slate-950 border border-slate-800 focus:border-pink-500/50 rounded-xl pr-10 pl-4 py-2 text-xs font-bold font-sans text-slate-200 placeholder-slate-600 outline-none transition-all">
+              </div>
+              
+              <!-- Quick Auto-refresh tick box -->
+              <div class="flex items-center gap-2 mr-3">
+                <input type="checkbox" id="auto-refresh-check" checked class="w-4 h-4 rounded text-pink-500 bg-slate-950 border-slate-800 focus:ring-0 cursor-pointer" onchange="toggleAutoRefresh(this)">
+                <label for="auto-refresh-check" class="text-slate-400 text-xs font-bold select-none cursor-pointer flex items-center gap-1.5">
+                  <span>بروزرسانی زنده (۳ ثانیه)</span>
+                  <span id="refresh-pulse" class="h-2 w-2 rounded-full bg-pink-500 animate-ping"></span>
+                </label>
+              </div>
+            </div>
+            
+            <div class="flex items-center gap-2">
+              <select id="action-select-filter" onchange="filterLogsList()" class="bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-xs font-bold text-slate-300 outline-none focus:border-pink-500 cursor-pointer">
+                <option value="">فیلتر بر اساس عملیات (همه)</option>
+                <option value="ثبت">ثبت پیش‌بینی</option>
+                <option value="کلیک">کلیک و ناوبری</option>
+                <option value="شبیه‌ساز">شبیه‌سازی</option>
+                <option value="شبیه">شبیه‌ساز مسابقات</option>
+                <option value="خطا">عملیات با خطا</option>
+                <option value="ذخیره">ذخیره نهایی</option>
+              </select>
+              
+              <button onclick="downloadJsonLogs()" class="px-4 py-2 rounded-xl bg-slate-850 hover:bg-slate-800 text-slate-300 text-xs font-bold transition-all border border-slate-800 cursor-pointer flex items-center gap-1.5">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                <span>خروجی JSON</span>
+              </button>
+            </div>
+          </div>
+          
+          <!-- Table and Rows -->
+          <div class="overflow-x-auto">
+            <table class="w-full text-right border-collapse text-xs">
+              <thead>
+                <tr class="bg-slate-950/60 border-b border-slate-800 text-slate-400 font-bold select-none">
+                  <th class="p-4 w-28">زمان ثبت لاگ</th>
+                  <th class="p-4 w-32">کاربر</th>
+                  <th class="p-4 w-72">عملیات / اکشن</th>
+                  <th class="p-4">جزئیات فنی رویداد</th>
+                  <th class="p-4 w-28 text-center">شناسه لاگ</th>
+                </tr>
+              </thead>
+              <tbody id="logs-tbody">
+                ${list.length === 0 ? `
+                  <tr>
+                    <td colspan="5" class="p-12 text-center text-slate-600 font-bold select-none text-sm">هیچ لاگِ فنی در دیتابیس ثبت نشده است. کلاینت را باز کنید تا مانیتورینگ فوراً آغاز شود.</td>
+                  </tr>
+                ` : list.map(log => {
+                  let formattedDetails = "";
+                  try {
+                    if (log.details) {
+                      const parsed = typeof log.details === 'string' ? JSON.parse(log.details) : log.details;
+                      formattedDetails = `<span class="bg-slate-950 border border-white/5 py-1 px-2.5 rounded-lg text-[10px] text-pink-300 code-font inline-block max-w-full truncate">${JSON.stringify(parsed)}</span>`;
+                    }
+                  } catch (e) {
+                    formattedDetails = `<span class="text-slate-400 code-font block max-w-md truncate">${log.details}</span>`;
+                  }
+                  
+                  // Color indicators for certain actions to make visual mapping amazing
+                  let badgeColor = "bg-slate-800 text-slate-300";
+                  if (log.action.includes("خطا") || log.action.includes("ناموفق")) {
+                    badgeColor = "bg-red-500/10 text-red-400 border border-red-500/15";
+                  } else if (log.action.includes("ثبت") || log.action.includes("شبیه‌ساز") || log.action.includes("دقیق")) {
+                    badgeColor = "bg-indigo-500/10 text-indigo-400 border border-indigo-500/15";
+                  } else if (log.action.includes("کلیک") || log.action.includes("بارگذاری")) {
+                    badgeColor = "bg-slate-500/10 text-slate-300 border border-white/5";
+                  } else if (log.action.includes("ذخیره") || log.action.includes("موفقیت")) {
+                    badgeColor = "bg-emerald-500/10 text-emerald-400 border border-emerald-500/15";
+                  }
+                  
+                  return `
+                    <tr class="border-b border-slate-800/60 hover:bg-white/[0.01] transition-all duration-150">
+                      <td class="p-4 text-slate-400 code-font select-none">${new Date(log.timestamp).toLocaleString("fa-IR")}</td>
+                      <td class="p-4 font-black text-slate-200">${log.username}</td>
+                      <td class="p-4">
+                        <span class="inline-block px-2.5 py-1 rounded-lg text-[11px] font-black ${badgeColor}">${log.action}</span>
+                      </td>
+                      <td class="p-4 text-slate-300 font-medium leading-relaxed">${formattedDetails || '<span class="text-slate-650 font-bold italic">-</span>'}</td>
+                      <td class="p-4 text-center code-font text-[10px] text-slate-500 select-all">${log.id}</td>
+                    </tr>
+                  `;
+                }).join("")}
+              </tbody>
+            </table>
+          </div>
+          
+        </div>
+      </div>
+      
+      <!-- Footer details -->
+      <p class="text-center text-slate-600 text-[10px] font-bold mt-12 py-6 select-none border-t border-slate-900">
+        سیستم مانیتورینگ شادکیو جام جهانی ۲۰۲۶ • طراحی با بالاترین دقت لاگین و امنیت کلاینت
+      </p>
+
+      <script>
+        let refreshInterval = null;
+
+        function startAutoRefresh() {
+          refreshInterval = setInterval(() => {
+            fetch('/api/action-logs')
+              .then(res => res.json())
+              .then(data => {
+                const tbody = document.getElementById('logs-tbody');
+                const totalLogsSpan = document.getElementById('stats-total-logs');
+                if (totalLogsSpan) {
+                  totalLogsSpan.textContent = data.length + ' رکورد فعال';
+                }
+                
+                if (data.length === 0) {
+                  tbody.innerHTML = '<tr><td colspan="5" class="p-12 text-center text-slate-600 font-bold select-none text-sm">هیچ لاگِ فنی در دیتابیس ثبت نشده است. کلاینت را باز کنید تا مانیتورینگ فوراً آغاز شود.</td></tr>';
+                  return;
+                }
+                
+                // Get selected values for persistent filtering after refresh
+                const searchQuery = document.getElementById('log-search-input').value.toLowerCase().trim();
+                const filterOption = document.getElementById('action-select-filter').value;
+
+                const rowsHtml = data.map(log => {
+                  let formattedDetails = "";
+                  try {
+                    if (log.details) {
+                      const parsed = typeof log.details === 'string' ? JSON.parse(log.details) : log.details;
+                      formattedDetails = '<span class="bg-slate-950 border border-white/5 py-1 px-2.5 rounded-lg text-[10px] text-pink-300 code-font inline-block max-w-full truncate">' + JSON.stringify(parsed) + '</span>';
+                    }
+                  } catch (e) {
+                    formattedDetails = '<span class="text-slate-400 code-font block max-w-md truncate">' + log.details + '</span>';
+                  }
+                  
+                  let badgeColor = "bg-slate-800 text-slate-300";
+                  if (log.action.includes("خطا") || log.action.includes("ناموفق")) {
+                    badgeColor = "bg-red-500/10 text-red-400 border border-red-500/15";
+                  } else if (log.action.includes("ثبت") || log.action.includes("شبیه‌ساز") || log.action.includes("دقیق")) {
+                    badgeColor = "bg-indigo-500/10 text-indigo-400 border border-indigo-500/15";
+                  } else if (log.action.includes("کلیک") || log.action.includes("بارگذاری")) {
+                    badgeColor = "bg-slate-500/10 text-slate-300 border border-white/5";
+                  } else if (log.action.includes("ذخیره") || log.action.includes("موفقیت")) {
+                    badgeColor = "bg-emerald-500/10 text-emerald-400 border border-emerald-500/15";
+                  }
+                  
+                  return '<tr class="border-b border-slate-800/60 hover:bg-white/[0.01] transition-all duration-150">' +
+                    '<td class="p-4 text-slate-400 code-font select-none">' + new Date(log.timestamp).toLocaleString("fa-IR") + '</td>' +
+                    '<td class="p-4 font-black text-slate-200">' + log.username + '</td>' +
+                    '<td class="p-4"><span class="inline-block px-2.5 py-1 rounded-lg text-[11px] font-black ' + badgeColor + '">' + log.action + '</span></td>' +
+                    '<td class="p-4 text-slate-300 font-medium leading-relaxed">' + (formattedDetails || '<span class="text-slate-650 font-bold italic">-</span>') + '</td>' +
+                    '<td class="p-4 text-center code-font text-[10px] text-slate-500 select-all">' + log.id + '</td>' +
+                    '</tr>';
+                }).join("");
+                
+                tbody.innerHTML = rowsHtml;
+                
+                // Re-apply filter immediately
+                filterLogsList();
+              })
+              .catch(err => console.error("Error refreshing action logs in auto mode:", err));
+          }, 3000);
+        }
+
+        function stopAutoRefresh() {
+          if (refreshInterval) {
+            clearInterval(refreshInterval);
+            refreshInterval = null;
+          }
+        }
+
+        function toggleAutoRefresh(cb) {
+          const pulse = document.getElementById('refresh-pulse');
+          if (cb.checked) {
+            startAutoRefresh();
+            if (pulse) pulse.classList.add('animate-ping');
+          } else {
+            stopAutoRefresh();
+            if (pulse) pulse.classList.remove('animate-ping');
+          }
+        }
+
+        function filterLogsList() {
+          const searchQuery = document.getElementById('log-search-input').value.toLowerCase().trim();
+          const filterAction = document.getElementById('action-select-filter').value;
+          
+          const tbody = document.getElementById('logs-tbody');
+          const rows = tbody.getElementsByTagName('tr');
+          if (rows.length === 1 && rows[0].cells.length === 1) return; // Empty fallback row
+          
+          for (let i = 0; i < rows.length; i++) {
+            const cells = rows[i].getElementsByTagName('td');
+            if (cells.length < 5) continue;
+            
+            const timestamp = cells[0].textContent.toLowerCase();
+            const username = cells[1].textContent.toLowerCase();
+            const action = cells[2].textContent.toLowerCase();
+            const details = cells[3].textContent.toLowerCase();
+            const id = cells[4].textContent.toLowerCase();
+            
+            const matchesSearch = !searchQuery || 
+              username.includes(searchQuery) || 
+              action.includes(searchQuery) || 
+              details.includes(searchQuery) || 
+              id.includes(searchQuery) ||
+              timestamp.includes(searchQuery);
+              
+            const matchesCategory = !filterAction || action.includes(filterAction.toLowerCase());
+            
+            if (matchesSearch && matchesCategory) {
+              rows[i].style.display = "";
+            } else {
+              rows[i].style.display = "none";
+            }
+          }
+        }
+
+        function clearLogsOnServer() {
+          if (confirm("آیا مطمئن هستید که می‌خواهید کل لاگ‌های مانیتورینگ را از روی دیتابیس پاک کنید؟ این عملیات غیرقابل بازگشت است.")) {
+            fetch('/api/action-logs', { method: 'DELETE' })
+              .then(res => res.json())
+              .then(data => {
+                alert("کلیه لاگ‌های فنی با موفقیت پاک شدند.");
+                window.location.reload();
+              })
+              .catch(err => {
+                alert("خطا در ارتباط با سرور برای پاکسازی لاگ‌ها.");
+                console.error(err);
+              });
+          }
+        }
+
+        function downloadJsonLogs() {
+          fetch('/api/action-logs')
+            .then(res => res.json())
+            .then(data => {
+              const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
+              const downloadAnchor = document.createElement('a');
+              downloadAnchor.setAttribute("href", dataStr);
+              downloadAnchor.setAttribute("download", "shad_worldcup_technical_logs_" + Date.now() + ".json");
+              document.body.appendChild(downloadAnchor);
+              downloadAnchor.click();
+              downloadAnchor.remove();
+            })
+            .catch(err => alert("خطا در دانلود فایل JSON لاگ‌ها"));
+        }
+
+        // Initialize immediately on boot
+        startAutoRefresh();
+      </script>
+    </body>
+    </html>
+    `;
+    
+    res.send(html);
+  } catch (error: any) {
+    res.status(500).send("Fatal Error generating technical log view: " + error.message);
+  }
+});
+
 // 📌 USER ACTION TRACKING ENDPOINTS
 app.get("/api/action-logs", async (req, res) => {
   try {
