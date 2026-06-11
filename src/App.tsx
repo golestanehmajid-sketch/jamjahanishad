@@ -2188,57 +2188,53 @@ export default function App() {
                       id="prediction-share-card-render"
                       className="w-[340px] sm:w-[380px] bg-slate-950 p-6 rounded-3xl border border-pink-500/30 flex flex-col gap-4 text-slate-100 relative overflow-hidden select-none text-right shrink-0"
                       style={{
-                        background: 'linear-gradient(135deg, #090d16 0%, #17102e 50%, #2a0935 100%)',
-                        boxShadow: '0 0 25px rgba(244,63,94,0.12)',
+                        background: 'linear-gradient(135deg, #07090e 0%, #150f28 50%, #24072c 100%)',
+                        boxShadow: '0 0 35px rgba(236,72,153,0.18)',
                       }}
                       dir="rtl"
                     >
                       {/* Design accents */}
-                      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-pink-500/10 via-transparent to-transparent pointer-events-none" />
-                      <div className="absolute -top-10 -right-10 w-40 h-40 bg-pink-500/10 blur-3xl rounded-full" />
-                      <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-purple-500/10 blur-3xl rounded-full" />
+                      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-pink-500/12 via-transparent to-transparent pointer-events-none" />
+                      <div className="absolute -top-10 -right-10 w-40 h-40 bg-pink-500/15 blur-3xl rounded-full" />
+                      <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-purple-500/15 blur-3xl rounded-full" />
                       
                       {/* Card Header */}
-                      <div className="flex items-center justify-between border-b border-white/10 pb-4 relative z-10">
+                      <div className="flex items-center justify-between border-b border-white/10 pb-3 relative z-10">
                         <div className="flex items-center gap-2">
-                          <span className="text-2xl animate-bounce">⚽</span>
+                          <span className="text-xl">⚽</span>
                           <div className="text-right">
-                            <h4 className="text-sm font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-amber-300 to-yellow-300 Persian-font tracking-tight leading-none">پیش‌بینی جام شادکیو</h4>
-                            <span className="text-[8px] text-slate-400 font-bold tracking-wider block mt-1">OFFICIAL CHAMPIONSHIP CARD</span>
+                            <h4 className="text-sm font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-amber-300 to-yellow-300 Persian-font tracking-tight leading-none">کارت پیش‌بینی شادکیو</h4>
                           </div>
                         </div>
                         <div className="bg-gradient-to-r from-pink-500 to-purple-650 px-2.5 py-1 rounded-full text-[9px] font-black tracking-tight select-none border border-white/10 Persian-font">
-                          🏆 شادکیو جام
+                          🏆 جام جهانی ۲۰۲۶
                         </div>
                       </div>
 
                       {/* Avatar & User Profile */}
-                      <div className="flex items-center gap-3 bg-white/5 p-3.5 rounded-2xl border border-white/5 relative z-10 select-none">
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-pink-500 via-purple-500 to-amber-400 flex items-center justify-center text-2xl shadow-md border border-white/20 select-none shrink-0">
-                          👑
+                      <div className="flex items-center gap-3 bg-white/5 p-3 rounded-2xl border border-white/5 relative z-10 select-none">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-pink-500 to-purple-650 flex items-center justify-center text-lg shadow-md border border-white/10 select-none shrink-0">
+                          👤
                         </div>
                         <div className="flex-1 text-right">
-                          <p className="text-[10px] text-slate-400 font-semibold select-none leading-none mb-1">کارت پیش‌بینی رسمی</p>
-                          <h4 className="text-sm sm:text-base font-black text-white Persian-font leading-relaxed truncate">{userName || "قهرمان شادکیو"}</h4>
+                          <h4 className="text-sm font-black text-white Persian-font leading-none">{userName || "کاربر شادکیو"}</h4>
                         </div>
                       </div>
 
                       {/* Golden Champion Prediction */}
-                      <div className="bg-slate-900/80 p-3.5 rounded-2.5xl border border-amber-500/20 flex items-center justify-between relative z-10">
-                        <div className="text-right">
-                          <span className="text-[10px] text-amber-400 font-bold block select-none mb-0.5">پیش‌بینی فاتح مدال طلا و جام مسابقات</span>
-                          <span className="text-xs sm:text-sm font-black text-slate-100 Persian-font block mt-0.5">
-                            {campaignChamp && TEAMS[campaignChamp] ? (
-                              <span className="flex items-center gap-1.5 justify-start">
-                                <span className="text-lg">{TEAMS[campaignChamp].flag}</span>
-                                <span className="text-amber-300 font-extrabold">{TEAMS[campaignChamp].name}</span>
-                              </span>
-                            ) : (
-                              <span className="text-slate-500">انتخاب نشده است</span>
-                            )}
-                          </span>
+                      <div className="bg-slate-900/80 p-4 rounded-2xl border border-amber-500/30 flex items-center justify-between relative z-10">
+                        <div className="text-right flex-1">
+                          <span className="text-[10px] text-amber-400 font-black block select-none mb-1">قهرمان نهایی من</span>
+                          {campaignChamp && TEAMS[campaignChamp] ? (
+                            <div className="flex items-center gap-2 mt-1">
+                              <TeamFlag team={TEAMS[campaignChamp]} className="w-8 h-5 rounded border border-white/20 shadow-md object-cover" />
+                              <span className="text-sm font-black text-amber-300 Persian-font">{TEAMS[campaignChamp].name}</span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-slate-500">مشخص نشده</span>
+                          )}
                         </div>
-                        <div className="p-2 sm:p-2.5 bg-amber-500/15 rounded-xl text-amber-400 border border-amber-500/20">
+                        <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 font-bold shrink-0">
                           🏆
                         </div>
                       </div>
@@ -2246,56 +2242,53 @@ export default function App() {
                       {/* Favorite & Stats Grid */}
                       <div className="grid grid-cols-2 gap-2 relative z-10 text-right">
                         {/* Favorite Team */}
-                        <div className="bg-white/5 p-3 rounded-2xl border border-white/5 flex flex-col justify-between h-20">
-                          <span className="text-[10px] text-slate-400 font-bold select-none block leading-none">تیم محبوب من</span>
-                          <span className="text-xs sm:text-xs font-black text-rose-300 Persian-font block truncate mt-1">
+                        <div className="bg-white/5 p-3 rounded-xl border border-white/5 flex flex-col justify-between h-18">
+                          <span className="text-[10px] text-slate-400 font-semibold select-none block leading-none">تیم محبوب</span>
+                          <div className="mt-1">
                             {favoriteTeam && TEAMS[favoriteTeam] ? (
-                              <span className="flex items-center gap-1 justify-start">
-                                <span className="text-base">{TEAMS[favoriteTeam].flag}</span>
-                                <span className="truncate">{TEAMS[favoriteTeam].name}</span>
-                              </span>
+                              <div className="flex items-center gap-1.5 justify-start">
+                                <TeamFlag team={TEAMS[favoriteTeam]} className="w-6 h-4 rounded border border-white/10 shadow-sm object-cover" />
+                                <span className="text-xs font-black text-rose-300 Persian-font truncate">{TEAMS[favoriteTeam].name}</span>
+                              </div>
                             ) : (
-                              "هیچکدام (بی‌طرف)"
+                              <span className="text-xs font-bold text-slate-500 Persian-font">بی‌طرف</span>
                             )}
-                          </span>
+                          </div>
                         </div>
 
-                        {/* Iran enthusiasm status */}
-                        <div className="bg-white/5 p-3 rounded-2xl border border-white/5 flex flex-col justify-between h-20">
-                          <span className="text-[10px] text-pink-400 font-bold select-none block leading-none">شاخص وفاداری به ایران</span>
+                        {/* Iran devotion */}
+                        <div className="bg-white/5 p-3 rounded-xl border border-white/5 flex flex-col justify-between h-18">
+                          <span className="text-[10px] text-emerald-400 font-semibold select-none block leading-none">تعصب به ایران</span>
                           <div className="mt-1">
-                            <span className="text-xs font-black text-pink-450 Persian-font block">{iranEnthusiasm}٪ تعصب</span>
-                            <div className="w-full bg-white/10 h-1.5 rounded-full mt-1.5 overflow-hidden">
-                              <div className="h-full bg-gradient-to-r from-pink-500 to-purple-500 rounded-full" style={{ width: `${iranEnthusiasm}%` }} />
+                            <span className="text-xs font-black text-white Persian-font block">{iranEnthusiasm}٪</span>
+                            <div className="w-full bg-slate-900 h-1 rounded-full mt-1 overflow-hidden">
+                              <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full animate-pulse" style={{ width: `${iranEnthusiasm}%` }} />
                             </div>
                           </div>
                         </div>
                       </div>
 
-                      {/* Additional Achievements and Matches details */}
-                      <div className="bg-white/5 p-3 rounded-2xl border border-white/5 grid grid-cols-2 gap-2 relative z-10 text-right">
+                      {/* Predictions Count & Achievements */}
+                      <div className="bg-white/5 p-3 rounded-xl border border-white/5 grid grid-cols-2 gap-2 relative z-10 text-right">
                         <div>
-                          <span className="text-[10px] text-slate-400 font-bold block select-none">پیش‌بینی بازی‌ها</span>
+                          <span className="text-[10px] text-slate-400 font-semibold block select-none mb-0.5">کل پیش‌بینی‌ها</span>
                           <span className="text-xs sm:text-sm font-black text-white Persian-font">
-                            {matches.filter((m) => m.scoreA !== null && m.scoreB !== null).length} مسابقه
+                            {matches.filter((m) => m.scoreA !== null && m.scoreB !== null).length} بازی
                           </span>
                         </div>
                         <div className="border-r border-white/10 pr-2">
-                          <span className="text-[10px] text-slate-400 font-bold block select-none">نشان‌های افتخار</span>
-                          <span className="text-xs sm:text-sm font-black text-amber-400 Persian-font flex items-center gap-1 justify-start">
-                            🌟 {stats.unlockedCount} نشان
+                          <span className="text-[10px] text-slate-400 font-semibold block select-none mb-0.5">مدال‌های کسب‌شده</span>
+                          <span className="text-xs sm:text-sm font-black text-amber-400 Persian-font">
+                            {stats.unlockedCount} نشان 🎖️
                           </span>
                         </div>
                       </div>
 
-                      {/* Footer CTA & scan info */}
-                      <div className="border-t border-white/10 pt-4 mt-1 flex flex-col items-center text-center relative z-10 gap-1 select-none">
-                        <p className="text-[10px] text-transparent bg-clip-text bg-gradient-to-r from-white via-pink-200 to-purple-300 max-w-xs leading-relaxed Persian-font font-bold">
-                          هر روز بیا پیش‌بینی کن و گوشی تلفن همراه برنده شو! 📱🏆
+                      {/* Footer CTA */}
+                      <div className="border-t border-white/10 pt-3.5 mt-1 flex flex-col items-center text-center relative z-10 select-none">
+                        <p className="text-[10px] text-transparent bg-clip-text bg-gradient-to-r from-pink-300 via-purple-200 to-slate-200 leading-none Persian-font font-black">
+                          در مسابقه زنده شادکیو پیش‌بینی کن ⚽📱
                         </p>
-                        <div className="text-[8px] bg-white/5 border border-white/15 px-3 py-1 rounded-full text-pink-300 font-bold uppercase tracking-widest Persian-font">
-                          SHADQ JAMEJAHANI
-                        </div>
                       </div>
                     </div>
                   </div>
@@ -2324,6 +2317,16 @@ export default function App() {
                       تصویر در گالری گوشی شما ذخیره خواهد شد. آن را برای دوستان خود بفرستید، استوری کنید یا برای ما ارسال کنید!
                     </p>
                   </div>
+
+                  {/* Back/Close Button */}
+                  <button
+                    id="back-share-image-btn"
+                    onClick={() => setShowShareModal(false)}
+                    className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white font-bold text-xs duration-150 cursor-pointer border border-white/10 outline-none select-none Persian-font mr-auto"
+                  >
+                    <ChevronRight size={14} />
+                    <span>بازگشت به برنامه</span>
+                  </button>
                 </div>
               ) : (
                 /* --- ORIGINAL TEXT CODE SHARE TAB --- */
@@ -2370,11 +2373,21 @@ export default function App() {
                     <button
                       id="load-friend-code"
                       onClick={handleImportCode}
-                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-pink-500 via-purple-600 to-indigo-650 text-white font-bold text-xs duration-200 cursor-pointer outline-none shadow hover:opacity-90"
+                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-pink-500 via-purple-600 to-indigo-650 text-white font-bold text-xs duration-200 cursor-pointer outline-none shadow hover:opacity-90 mb-1"
                     >
                       بارگذاری پیش‌بینی دوست
                     </button>
                   </div>
+
+                  {/* Back/Close Button */}
+                  <button
+                    id="back-share-code-btn"
+                    onClick={() => setShowShareModal(false)}
+                    className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white font-bold text-xs duration-150 cursor-pointer border border-white/10 outline-none select-none Persian-font"
+                  >
+                    <ChevronRight size={14} />
+                    <span>بازگشت به برنامه</span>
+                  </button>
                 </div>
               )}
             </motion.div>
