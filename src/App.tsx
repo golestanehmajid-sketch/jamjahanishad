@@ -18,6 +18,7 @@ import { IranSupporterHub } from "./components/IranSupporterHub";
 import { TeensGiftHub } from "./components/TeensGiftHub";
 import { ParticipantsDashboard } from "./components/ParticipantsDashboard";
 import { AppAdminDashboard } from "./components/AppAdminDashboard";
+import { RulesAndPrizes } from "./components/RulesAndPrizes";
 import { trackUserAction } from "./utils/tracker";
 import {
   Trophy,
@@ -253,7 +254,7 @@ export default function App() {
     return params.has("admin") || params.has("panel") || params.get("mode") === "admin";
   });
 
-  const [activeTab, setActiveTab] = useState<"groups" | "standings" | "knockout" | "achievements" | "sportsNews" | "participants" | "adminDashboard">("groups");
+  const [activeTab, setActiveTab] = useState<"groups" | "standings" | "knockout" | "achievements" | "sportsNews" | "participants" | "adminDashboard" | "rules">("groups");
   const [selectedGroupFilter, setSelectedGroupFilter] = useState<string>("A");
   const [matchViewMode, setMatchViewMode] = useState<"daily" | "groups">("daily");
   const [selectedDay, setSelectedDay] = useState<number>(1);
@@ -376,6 +377,7 @@ export default function App() {
       knockout: "نمودار مرحله حذفی 🏆",
       achievements: "نشان‌ها و دستاوردهای من 🏅",
       sportsNews: "اخبار و پخش زنده 📺",
+      rules: "راهنما و جوایز مسابقه 🎁",
       participants: "جدول کارشناسی شرکت‌کنندگان 👥",
       adminDashboard: "پنل مدیریت ابری ⚡"
     };
@@ -1363,6 +1365,7 @@ export default function App() {
             { id: "knockout", label: "نمودار مرحله حذفی (پلی‌آف)", icon: Trophy },
             { id: "achievements", label: "نشان‌ها و دستاوردهای من", icon: Sparkles },
             { id: "sportsNews", label: "اخبار و پخش زنده", icon: Radio },
+            { id: "rules", label: "راهنما و جوایز", icon: Gift },
             { id: "participants", label: "جدول کارشناسی شرکت‌کنندگان", icon: Users },
             ...(isAdminMode ? [{ id: "adminDashboard", label: "⚡ پنل مدیریت ابری", icon: ShieldCheck }] : [])
           ].map((tab) => {
@@ -2121,6 +2124,20 @@ export default function App() {
               <AppAdminDashboard />
             </motion.div>
           )}
+
+          {/* 8. RULES & PRIZES VIEW */}
+          {activeTab === "rules" && (
+            <motion.div
+              id="view-rules"
+              key="rules"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.15 }}
+            >
+              <RulesAndPrizes />
+            </motion.div>
+          )}
         </AnimatePresence>
       </main>
 
@@ -2522,6 +2539,7 @@ export default function App() {
           { id: "knockout", label: "حذفی", icon: Trophy },
           { id: "achievements", label: "نشان‌ها", icon: Sparkles },
           { id: "sportsNews", label: "پخش زنده", icon: Radio },
+          { id: "rules", label: "جوایز", icon: Gift },
           { id: "participants", label: "کاربران", icon: Users },
           ...(isAdminMode ? [{ id: "adminDashboard", label: "مدیریت", icon: ShieldCheck }] : [])
         ].map((tab) => {
