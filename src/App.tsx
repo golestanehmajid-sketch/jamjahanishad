@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { toPng } from "html-to-image";
 import { Team, Match, Group, GroupStanding, Achievement } from "./types";
 import { TEAMS, GROUPS, generateGroupMatches, ACHIEVEMENTS_DATA, getMatchDay } from "./data";
 import { calculateStandings, simulateMatchScore, checkUnlockedAchievements } from "./utils";
@@ -47,6 +48,69 @@ import {
   X
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+
+const getTeamFlagColor = (teamId: string): string => {
+  const colors: Record<string, string> = {
+    mexico: "#10b981", // green
+    southafrica: "#007a4d", // green
+    korea: "#cd2e3a", // red
+    czech: "#11457e", // blue
+    canada: "#ff0000", // red
+    bosnia: "#002395", // blue
+    qatar: "#8a1538", // maroon
+    switzerland: "#da291c", // red
+    brazil: "#eab308", // yellow/green
+    morocco: "#c1272d", // red
+    haiti: "#00209f", // blue
+    scotland: "#005eb8", // blue
+    usa: "#002868", // blue
+    paraguay: "#d52b1e", // red
+    australia: "#00008b", // blue
+    turkey: "#e30a17", // red
+    germany: "#ffcc00", // yellow
+    curacao: "#002b7f", // blue
+    ivorycoast: "#f97316", // orange
+    ecuador: "#facc15", // yellow
+    netherlands: "#ff4f00", // orange
+    japan: "#bc002d", // red
+    sweden: "#006aa7", // blue
+    tunisia: "#e2091c", // red
+    belgium: "#ffe936", // yellow
+    egypt: "#ef4444", // red
+    iran: "#22c55e", // green
+    newzealand: "#94a3b8", // grey/silver
+    spain: "#f1bf00", // yellow
+    capeverde: "#002a8f", // blue
+    saudi: "#006c35", // green
+    uruguay: "#0081c6", // blue
+    france: "#3b82f6", // blue
+    senegal: "#10b981", // green
+    iraq: "#007a3d", // green
+    norway: "#ef2b2d", // red
+    argentina: "#06b6d4", // light blue
+    algeria: "#10b981", // green
+    austria: "#ed2939", // red
+    jordan: "#ce1126", // red
+    portugal: "#ef4444", // red
+    drcongo: "#3b82f6", // blue
+    uzbekistan: "#00bfff", // cyan
+    colombia: "#facc15", // yellow
+    england: "#ef4444", // red
+    croatia: "#ef4444", // red
+    ghana: "#facc15", // yellow
+    panama: "#3b82f6", // blue
+  };
+  return colors[teamId] || "#ec4899"; // default pink
+};
+
+const hexToRgb = (hex: string): string => {
+  const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
+  const fullHex = hex.replace(shorthandRegex, (_, r, g, b) => r + r + g + g + b + b);
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(fullHex);
+  return result
+    ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}`
+    : "236, 72, 153"; // default to pink
+};
 
 export default function App() {
   // ----------------------------------------------------
@@ -202,6 +266,8 @@ export default function App() {
   const [shareCode, setShareCode] = useState<string>("");
   const [importCodeText, setImportCodeText] = useState("");
   const [showShareModal, setShowShareModal] = useState(false);
+  const [shareTab, setShareTab] = useState<"image" | "code">("image");
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
 
   // Active teenager gift effects states
   const [activeEffects, setActiveEffects] = useState<Record<string, boolean>>(() => {
@@ -226,6 +292,71 @@ export default function App() {
       glowingCard: "کارت نقره‌ای کهکشانی 💳"
     };
     trackUserAction(`${active ? "فعال‌سازی" : "غیرفعال‌سازی"} افکت کادوی نوجوان شاد: ${effectLabels[effectId] || effectId}`);
+  };
+
+  const [isFabOpen, setIsFabOpen] = useState(false);
+
+  const handleFabShortcut = (action: "daily" | "standings") => {
+    if (action === "daily") {
+      setActiveTab("groups");
+      setMatchViewMode("daily");
+      trackUserAction("کلیک روی میانبر ثبت پیش‌بینی روزانه از طریق دکمه شناور FAB");
+    } else if (action === "standings") {
+      setActiveTab("standings");
+      trackUserAction("کلیک روی میانبر مشاهده جدول رده‌بندی از طریق دکمه شناور FAB");
+    }
+    setIsFabOpen(false);
+
+    setTimeout(() => {
+      const element = document.getElementById("primary-view-container") || document.getElementById("navigation-tabs");
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 100);
+  };
+
+  const handlePredictTodayBtn = () => {
+    trackUserAction("کلیک روی دکمه شناور پیش‌بینی سریع بازی امروز");
+    
+    // 1. Search for live match in groups
+    const liveMatch = matches.find(m => m.isLive && !m.isKnockout);
+    if (liveMatch) {
+      const matchDay = getMatchDay(liveMatch.id);
+      setActiveTab("groups");
+      setMatchViewMode("daily");
+      setSelectedDay(matchDay);
+      showNotice(`🔥 شادکیوی عزیز، هدایت شدی به بازی زنده امروز (روز ${matchDay})!`);
+    } else {
+      // 2. Find first unpredicted group match
+      const unpredictedMatch = matches.find(m => !m.isKnockout && (m.scoreA === null || m.scoreB === null));
+      if (unpredictedMatch) {
+        const matchDay = getMatchDay(unpredictedMatch.id);
+        setActiveTab("groups");
+        setMatchViewMode("daily");
+        setSelectedDay(matchDay);
+        showNotice(`🎯 هدایت شدی به روز ${matchDay} برای پیش‌بینی اولین بازی خالی پیش‌رو!`);
+      } else {
+        // 3. Find first unpredicted knockout match
+        const unpredictedKnockout = matches.find(m => m.isKnockout && (m.scoreA === null || m.scoreB === null));
+        if (unpredictedKnockout) {
+          setActiveTab("knockout");
+          showNotice(`🏆 تمام بازی‌های گروهی پیش‌بینی شده‌اند! هدایت شدی به درخت حذفی.`);
+        } else {
+          // All done
+          setActiveTab("groups");
+          setMatchViewMode("daily");
+          setSelectedDay(1);
+          showNotice(`✨ آفرین قهرمان! تو تمام بازی‌های گروهی و حذفی رو پیش‌بینی کردی!`);
+        }
+      }
+    }
+
+    setTimeout(() => {
+      const container = document.getElementById("primary-view-container") || document.getElementById("navigation-tabs");
+      if (container) {
+        container.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 100);
   };
 
   // First render guards for action logs tracking
@@ -662,7 +793,14 @@ export default function App() {
       }
 
       if (!response.ok) {
-        throw new Error("نمیتوان پیش‌بینی‌ها را روی سرور ذخیره کرد.");
+        let serverErrorMsg = "";
+        try {
+          const errData = await response.json();
+          if (errData && errData.error) {
+            serverErrorMsg = `: ${errData.error}`;
+          }
+        } catch (_) {}
+        throw new Error(`نمیتوان پیش‌بینی‌ها را روی سرور ذخیره کرد.${serverErrorMsg}`);
       }
 
       const savedParticipant = await response.json();
@@ -714,6 +852,40 @@ export default function App() {
     setTimeout(() => setCodeCopied(false), 2500);
   };
 
+  const downloadPredictionImage = async () => {
+    const node = document.getElementById("prediction-share-card-render");
+    if (!node) {
+      showNotice("خطا: المان کارت پیش‌بینی یافت نشد.");
+      return;
+    }
+    
+    setIsGeneratingImage(true);
+    try {
+      // Small timeout to allow styles/animations to settle
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      const dataUrl = await toPng(node, {
+        quality: 0.98,
+        pixelRatio: 2, // High resolution Retinal export
+        backgroundColor: "#020617", // slate-950 background
+        style: {
+          transform: 'scale(1)',
+          borderRadius: '0px'
+        }
+      });
+      
+      const link = document.createElement("a");
+      link.download = `jamejahani-predictions-${userName || "user"}.png`;
+      link.href = dataUrl;
+      link.click();
+      showNotice("تصویر زیبای برگه پیش‌بینی شما دانلود شد! ✨📸");
+    } catch (error) {
+      console.error("Error generating prediction image:", error);
+      showNotice("خطا در ساخت تصویر کارت پیش‌بینی. دوباره تلاش کنید!");
+    } finally {
+      setIsGeneratingImage(false);
+    }
+  };
+
   const handleImportCode = () => {
     if (!importCodeText.trim()) {
       alert("لطفا کد اشتراک‌گذاری معتبری وارد کنید.");
@@ -758,7 +930,7 @@ export default function App() {
   // 6. RENDER
   // ----------------------------------------------------
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans relative antialiased" dir="rtl">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans relative antialiased pb-20 sm:pb-0" dir="rtl">
       
       {/* Dynamic Background Grid Effects */}
       {activeEffects.gift_vuvuzela && (
@@ -880,9 +1052,12 @@ export default function App() {
                 </motion.div>
               </div>
               <div>
-                <h3 className="text-normal sm:text-[15px] font-black text-white tracking-tight Persian-font leading-relaxed">
-                  هر روز بیا اینجا پیش بینی کن و عصر در شادکیو شرکت کن کلی جایزه برنده شو
+                <h3 className="text-lg sm:text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-pink-200 to-purple-300 tracking-tight Persian-font leading-normal">
+                  پیش بینی کن و گوشی تلفن همراه برنده شو! 📱✨
                 </h3>
+                <p className="text-xs sm:text-sm font-bold text-slate-200 text-white/90 mt-1.5 Persian-font">
+                  هم مسابقه شادکیو داریم هم قرعه کشی و کلی جایزه روزانه
+                </p>
                 <p className="text-[10px] sm:text-xs text-slate-400 mt-1 select-none font-medium">
                   مسابقات آنلاین هیجان‌انگیز، پیش‌بینی مسابقات فوتبال و شانس برنده شدن جوایز شگفت‌انگیز روزانه!
                 </p>
@@ -1180,7 +1355,7 @@ export default function App() {
 
 
       {/* ----------------- MODERN TABS NAVIGATION ----------------- */}
-      <nav id="navigation-tabs" className="max-w-6xl mx-auto w-full px-4 pt-6">
+      <nav id="navigation-tabs" className="max-w-6xl mx-auto w-full px-4 pt-6 hidden sm:block">
         <div className="flex border-b border-white/5">
           {[
             { id: "groups", label: "گروه‌ها و بازی‌ها", icon: Calendar },
@@ -1244,66 +1419,205 @@ export default function App() {
               />
 
               {/* 🏆 Ultimate World Cup Champion Predictor Widget (Campaign) */}
-              <div id="campaign-ultimate-champion-predictor" className="bg-gradient-to-r from-slate-900 via-indigo-950/15 to-slate-900 border border-purple-500/15 rounded-3xl p-5 sm:p-6 shadow-xl relative overflow-hidden">
-                {/* Glowing effects */}
-                <div className="absolute top-0 right-0 w-32 h-1 bg-gradient-to-l from-pink-500 via-purple-500 to-indigo-500 rounded-full" />
-                <div className="absolute -top-10 -right-10 w-44 h-44 bg-purple-500/5 rounded-full filter blur-2xl pointer-events-none" />
+              <div 
+                id="campaign-ultimate-champion-predictor" 
+                className="relative overflow-hidden rounded-3xl border border-white/10 shadow-2xl p-6 transition-all duration-300"
+                style={{
+                  background: "radial-gradient(115% 140% at 0% 0%, rgba(139, 92, 246, 0.15) 0%, rgba(219, 39, 119, 0.1) 50%, rgba(2, 6, 23, 0.8) 100%)",
+                  boxShadow: "0 20px 40px -15px rgba(139, 92, 246, 0.15), inset 0 1px 0 0 rgba(255, 255, 255, 0.05)"
+                }}
+              >
+                {/* Stunning animated glowing nodes */}
+                <div className="absolute top-0 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-[100px] pointer-events-none animate-pulse duration-[6000ms]" />
+                <div className="absolute -bottom-20 -left-10 w-72 h-72 bg-pink-500/10 rounded-full blur-[80px] pointer-events-none animate-pulse duration-[4000ms]" />
+                
+                {/* Shimmering Top border */}
+                <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-pink-500/50 to-transparent pointer-events-none" />
 
-                <div className="flex flex-col md:flex-row items-center justify-between gap-5 relative z-10 w-full text-right" dir="rtl">
-                  <div className="flex items-center gap-4 flex-col sm:flex-row text-center sm:text-right w-full md:w-auto">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-yellow-400 to-amber-500 text-slate-950 shadow-lg shadow-amber-500/20">
-                      <Trophy size={24} className="animate-pulse" />
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-black text-purple-400 bg-purple-500/10 px-2.5 py-0.5 rounded-full border border-purple-500/20 select-none">
-                         پیش‌بینی زودهنگام و دریافت امتیاز هدیه 🎁
-                      </span>
-                      <h3 className="text-sm sm:text-base font-black text-white mt-1 leading-relaxed Persian-font">
-                        انتخاب قهرمان نهایی جام جهانی ۲۰۲۶
+                <div className="flex flex-col lg:flex-row items-center justify-between gap-6 relative z-10 w-full text-right" dir="rtl">
+                  
+                  {/* Left Column: Info Hub */}
+                  <div className="flex gap-4 flex-col sm:flex-row text-center sm:text-right items-center sm:items-start w-full lg:w-3/5">
+                    <motion.div 
+                      whileHover={{ scale: 1.1, rotate: 10 }}
+                      className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-amber-400 via-yellow-300 to-orange-500 text-slate-950 shadow-lg shadow-amber-500/20 border border-white/20 select-none cursor-pointer"
+                    >
+                      <Trophy size={28} className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.2)]" />
+                    </motion.div>
+                    
+                    <div className="space-y-1 w-full">
+                      <div className="flex flex-wrap items-center justify-center sm:justify-start gap-1.5">
+                        <span className="text-[10px] font-black text-amber-300 bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/20 select-none">
+                           پیش‌بینی فوق‌ستاره طلایی ⭐
+                        </span>
+                        <span className="text-[10px] font-black text-purple-300 bg-purple-500/10 px-2.5 py-0.5 rounded-full border border-purple-500/20 select-none">
+                           امتیاز هدیه: ۱۵۰ امتیاز بونس 🎁
+                        </span>
+                      </div>
+                      <h3 className="text-base sm:text-lg font-black text-white mt-1 leading-relaxed Persian-font">
+                        پیش‌بینی فاتح ابدی جام جهانی ۲۰۲۶
                       </h3>
-                      <p className="text-[10px] sm:text-xs text-slate-400">
-                        تیم قهرمان مورد حمایت خود را مستقیماً برگزینید تا ۱۵۰ امتیاز بونس کارشناسی فوتبال برای شما لحاظ شود!
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        در مسابقه زنده شادکیو، قهرمان نهایی رو از همین اول راه حدس بزن! تیم تحت حمایت خود را مشخص کنید تا در چارت افتخارات قرار بگیرید و امتیاز ویژه کارشناسی دریافت کنید.
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 w-full md:w-auto justify-center md:justify-end">
-                    {campaignChamp && TEAMS[campaignChamp] ? (
-                      <div className="flex items-center gap-4 bg-slate-950/60 border border-purple-500/30 p-2.5 px-4 rounded-xl relative overflow-hidden shadow-inner font-sans">
-                        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500"></div>
-                        <div className="flex items-center gap-3">
-                          <TeamFlag team={TEAMS[campaignChamp]} className="w-10 h-7 rounded shadow border border-white/20 object-cover shrink-0" />
-                          <div className="text-right leading-none">
-                            <span className="text-[9px] text-slate-400 font-bold block">قهرمان انتخابی شما:</span>
-                            <span className="text-xs sm:text-sm font-black text-pink-400 mt-1 block">{TEAMS[campaignChamp]?.name || campaignChamp}</span>
+                  {/* Right Column: Premium 3D-Like Glowing Card Slot */}
+                  <div className="w-full lg:w-2/5 flex justify-center lg:justify-end">
+                    {campaignChamp && TEAMS[campaignChamp] ? (() => {
+                      const glowColor = getTeamFlagColor(campaignChamp);
+                      const glowRgb = hexToRgb(glowColor);
+                      return (
+                        <motion.div 
+                          id="ultimate-champ-3d-card"
+                          whileHover={{ 
+                            scale: 1.04, 
+                            perspective: 1000,
+                            rotateX: 6,
+                            rotateY: -6,
+                          }}
+                          transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                          className="w-full max-w-sm group relative overflow-hidden rounded-2xl bg-slate-950/85 p-5 border shadow-2xl transition-all flex flex-col justify-between"
+                          style={{
+                            background: "linear-gradient(145deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.8) 100%)",
+                            borderColor: `rgba(${glowRgb}, 0.25)`,
+                            boxShadow: `0 10px 30px -10px rgba(0,0,0,0.5), 0 0 20px 2px rgba(${glowRgb}, 0.15)`
+                          }}
+                        >
+                          {/* Dynamic Team Colored Subtle Background Glow */}
+                          <div 
+                            className="absolute top-0 right-0 w-32 h-32 rounded-full filter blur-2xl transition-all duration-500 pointer-events-none group-hover:scale-125" 
+                            style={{
+                              background: `rgba(${glowRgb}, 0.12)`,
+                            }}
+                          />
+                          
+                          {/* Dynamic Team Colored Glowing Hover Overlay (Pulses when hovered) */}
+                          <motion.div 
+                            className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none rounded-2xl"
+                            style={{
+                              border: `1.5px solid ${glowColor}`,
+                              boxShadow: `inset 0 0 25px rgba(${glowRgb}, 0.3)`
+                            }}
+                            animate={{
+                              boxShadow: [
+                                `inset 0 0 15px rgba(${glowRgb}, 0.2)`,
+                                `inset 0 0 35px rgba(${glowRgb}, 0.45)`,
+                                `inset 0 0 15px rgba(${glowRgb}, 0.2)`
+                              ]
+                            }}
+                            transition={{
+                              repeat: Infinity,
+                              duration: 2,
+                              ease: "easeInOut"
+                            }}
+                          />
+                          
+                          {/* 3D Border Light Reflex */}
+                          <div 
+                            className="absolute inset-x-0 top-0 h-px opacity-60 group-hover:opacity-100 transition-opacity pointer-events-none" 
+                            style={{
+                              background: `linear-gradient(90deg, transparent, rgba(${glowRgb}, 0.8), transparent)`
+                            }}
+                          />
+                          
+                          {/* Inner Content */}
+                          <div className="flex items-center justify-between gap-4 mt-1">
+                            <div className="flex items-center gap-3">
+                              <motion.div 
+                                whileHover={{ scale: 1.1 }}
+                                className="relative"
+                              >
+                                <div 
+                                  className="absolute inset-0 rounded-lg filter blur-md animate-pulse" 
+                                  style={{ backgroundColor: `rgba(${glowRgb}, 0.45)` }}
+                                />
+                                <TeamFlag team={TEAMS[campaignChamp]} className="w-14 h-9 rounded-lg border border-white/20 shadow-lg object-cover relative z-10 block" />
+                              </motion.div>
+                              
+                              <div className="text-right">
+                                <span 
+                                  className="text-[10px] font-extrabold uppercase tracking-wide block mb-0.5"
+                                  style={{ color: glowColor }}
+                                >
+                                  قهرمان برگزیده شما
+                                </span>
+                                <h4 className="text-base font-black text-white Persian-font leading-none">{TEAMS[campaignChamp].name}</h4>
+                                <p className="text-[10px] text-slate-400 font-mono mt-1">{TEAMS[campaignChamp].nameEn}</p>
+                              </div>
+                            </div>
+  
+                            {/* Level / Strength Indicator */}
+                            <div className="flex flex-col items-center justify-center bg-slate-900 border border-white/5 py-1.5 px-2.5 rounded-xl shrink-0">
+                              <span className="text-[8px] text-slate-500 font-bold block select-none">توان تیم</span>
+                              <span className="text-xs font-extrabold text-amber-400 font-mono mt-0.5">★ {TEAMS[campaignChamp].strength}</span>
+                            </div>
                           </div>
+  
+                          {/* Middle Stat Line */}
+                          <div className="mt-4 pt-3.5 border-t border-white/5 flex items-center justify-between text-xs text-slate-400 select-none">
+                            <span className="flex items-center gap-1">
+                              <span className="text-xs">🏆</span>
+                              <span>مدعی اصلی جام قهرمانی</span>
+                            </span>
+                            <span 
+                              className="px-2 py-0.5 rounded-md text-[10px] font-bold"
+                              style={{ 
+                                backgroundColor: `rgba(${glowRgb}, 0.15)`,
+                                color: glowColor 
+                              }}
+                            >
+                              ۱۰۰٪ معتبر
+                            </span>
+                          </div>
+  
+                          {/* Action buttons slot */}
+                          <div className="mt-4 flex items-center gap-2">
+                            <button
+                              id="change-ultimate-champ-3d-btn"
+                              onClick={() => {
+                                setIsChampModalOpen(true);
+                                setChampModalSearch("");
+                              }}
+                              className="flex-1 py-1.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white text-[11px] font-black border border-white/10 hover:border-pink-500/35 transition-all text-center cursor-pointer outline-none shadow-md"
+                            >
+                              🔄 تغییر تیم قهرمان
+                            </button>
+                          </div>
+                        </motion.div>
+                      );
+                    })() : (
+                      <motion.div
+                        id="empty-champ-card-slot"
+                        whileHover={{ scale: 1.03 }}
+                        className="w-full max-w-sm rounded-2xl bg-slate-950/40 p-5 border border-white/5 flex flex-col items-center text-center justify-center gap-3 relative overflow-hidden py-6"
+                      >
+                        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-purple-950/20 pointer-events-none" />
+                        
+                        <div className="w-12 h-12 rounded-full bg-slate-900/90 flex items-center justify-center border border-white/10 text-xl relative z-10 text-slate-400 animate-pulse select-none">
+                          ❓
                         </div>
-                        <div className="w-px h-8 bg-slate-800" />
+                        
+                        <p className="text-xs text-slate-400 font-bold relative z-10 Persian-font leading-relaxed max-w-[240px]">
+                          هنوز تیمی را به عنوان قهرمان مطلق معرفی نکرده‌اید!
+                        </p>
+
                         <button
-                          id="change-ultimate-champ-btn"
+                          id="select-ultimate-champ-3d-btn"
                           onClick={() => {
                             setIsChampModalOpen(true);
                             setChampModalSearch("");
                           }}
-                          className="text-[10.5px] font-bold text-slate-400 hover:text-white underline cursor-pointer duration-150 py-1"
+                          className="relative z-10 px-5 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-650 hover:to-purple-750 text-white font-black text-xs shadow-lg shadow-pink-500/10 transition-all cursor-pointer outline-none border border-white/10 flex items-center gap-1.5 hover:scale-103 duration-150"
                         >
-                          تغییر تیم
+                          <Sparkles size={13} className="text-amber-400 animate-spin" />
+                          <span>انتخاب قهرمان طلایی جام</span>
                         </button>
-                      </div>
-                    ) : (
-                      <button
-                        id="select-ultimate-champ-btn"
-                        onClick={() => {
-                          setIsChampModalOpen(true);
-                          setChampModalSearch("");
-                        }}
-                        className="px-5 py-3 rounded-xl bg-gradient-to-r from-pink-500 via-purple-600 to-indigo-600 hover:opacity-95 font-black text-xs text-white shadow-lg shadow-purple-500/25 active:scale-95 duration-150 cursor-pointer flex items-center gap-2 outline-none border border-white/5"
-                      >
-                        <Sparkles size={14} className="text-yellow-200 animate-spin" />
-                        <span>انتخاب قهرمان جام</span>
-                      </button>
+                      </motion.div>
                     )}
                   </div>
+
                 </div>
               </div>
 
@@ -1813,80 +2127,256 @@ export default function App() {
       {/* ----------------- SHARE & EXPORT MODAL ----------------- */}
       <AnimatePresence>
         {showShareModal && (
-          <div id="share-modal" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm">
+          <div id="share-modal" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm overflow-y-auto">
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-slate-950/90 backdrop-blur-md border border-white/10 rounded-3xl w-full max-w-lg p-6 flex flex-col gap-4 shadow-2xl shadow-purple-950/40 relative"
+              className="bg-slate-950/90 backdrop-blur-md border border-white/10 rounded-3xl w-full max-w-xl p-5 flex flex-col gap-4 shadow-2xl shadow-purple-950/40 relative my-8 text-right"
+              dir="rtl"
             >
               {/* Close Button */}
               <button
                 id="close-modal-x"
                 onClick={() => setShowShareModal(false)}
-                className="absolute top-4 left-4 text-slate-400 hover:text-white bg-slate-900 p-1.5 rounded-lg border border-white/5 duration-150 cursor-pointer hover:bg-slate-800"
+                className="absolute top-4 left-4 text-slate-400 hover:text-white bg-slate-950 p-1.5 rounded-lg border border-white/5 duration-150 cursor-pointer hover:bg-slate-800 z-10"
               >
                 ✕
               </button>
 
-              <h3 className="text-xl font-bold text-white flex items-center gap-2 Persian-font leading-none mb-1">
+              <h3 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2 Persian-font leading-none mb-1">
                 <Share2 size={20} className="text-pink-400" />
                 <span>اشتراک‌گذاری پیش‌بینی‌ها</span>
               </h3>
 
-              {/* Section 1: Export Code */}
-              <div id="code-export-slot" className="mt-3 bg-slate-900/50 p-4 rounded-2xl border border-white/5 space-y-2.5">
-                <label className="block text-xs font-semibold text-slate-400 select-none">
-                  کد کپی شده را برای دوستان خود بفرستید تا برگه پیش‌بینی شما را ببینند:
-                </label>
-                <textarea
-                  id="share-code-field"
-                  readOnly
-                  value={shareCode}
-                  className="w-full h-18 bg-slate-950 text-slate-300 rounded-xl px-3 py-2 text-[10px] font-mono border border-white/5 focus:outline-none resize-none shadow-inner"
-                />
+              {/* Tabs Switcher */}
+              <div className="flex bg-slate-900/80 p-0.5 rounded-xl border border-white/5 w-full">
                 <button
-                  id="copy-code-btn"
-                  onClick={handleCopyCode}
-                  className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold duration-200 cursor-pointer outline-none ${
-                    codeCopied
-                      ? "bg-gradient-to-r from-pink-500 to-purple-500 text-white shadow"
-                      : "bg-slate-800 text-slate-200 hover:bg-slate-700 border border-white/5"
+                  id="tab-btn-share-image"
+                  onClick={() => setShareTab("image")}
+                  className={`flex-1 py-1.5 text-xs font-black rounded-lg duration-150 cursor-pointer text-center Persian-font ${
+                    shareTab === "image"
+                      ? "bg-gradient-to-r from-pink-500 to-purple-650 text-white shadow-md shadow-pink-500/10"
+                      : "text-slate-400 hover:text-slate-200"
                   }`}
                 >
-                  {codeCopied ? <CheckCircle size={14} /> : <Copy size={14} />}
-                  <span>{codeCopied ? "کد پیش‌بینی کپی شد مظهر خلاقیت!" : "کپی کد به حافظه موقت"}</span>
+                  📸 کارت تصویری مخصوص استوری و کانال
                 </button>
-              </div>
-
-              {/* Divider */}
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-px bg-white/5" />
-                <span className="text-[10px] text-slate-500 font-bold tracking-wider select-none">یا</span>
-                <div className="flex-1 h-px bg-white/5" />
-              </div>
-
-              {/* Section 2: Import Code */}
-              <div id="code-import-slot" className="bg-slate-900/50 p-4 rounded-2xl border border-white/5 space-y-2.5">
-                <label className="block text-xs font-semibold text-slate-400 select-none">
-                  کد دریافتی از دوست خود را اینجا قرار دهید تا کارهای او بارگذاری شود:
-                </label>
-                <textarea
-                  id="import-text-field"
-                  placeholder="کد پیش‌بینی دریافتی را اینجا پیست کنید..."
-                  value={importCodeText}
-                  onChange={(e) => setImportCodeText(e.target.value)}
-                  className="w-full h-18 bg-slate-950 text-slate-300 rounded-xl px-3 py-2 text-[10px] font-mono border border-white/5 focus:outline-none focus:border-purple-500/30 resize-none shadow-inner text-right"
-                  dir="ltr"
-                />
                 <button
-                  id="load-friend-code"
-                  onClick={handleImportCode}
-                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-pink-500 via-purple-600 to-indigo-600 text-white font-bold text-xs duration-200 cursor-pointer outline-none shadow hover:opacity-90"
+                  id="tab-btn-share-code"
+                  onClick={() => setShareTab("code")}
+                  className={`flex-1 py-1.5 text-xs font-black rounded-lg duration-150 cursor-pointer text-center Persian-font ${
+                    shareTab === "code"
+                      ? "bg-gradient-to-r from-pink-500 to-purple-650 text-white shadow-md shadow-pink-500/10"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
                 >
-                  بارگذاری پیش‌بینی دوست
+                  🔗 کد متنی بازیابی
                 </button>
               </div>
+
+              {shareTab === "image" ? (
+                /* --- IMAGE CARD SHARE TAB --- */
+                <div className="space-y-4">
+                  <p className="text-xs text-slate-400 font-bold select-none leading-relaxed">
+                    با کلیک روی دکمه زیر، کارت پیش‌بینی شخصی‌سازی‌شده و زیبای خود را به صورت تصویر دانلود کنید و در استوری یا کانال‌ها بفرستید:
+                  </p>
+
+                  <div className="flex justify-center p-2 bg-slate-900/40 rounded-2xl border border-white/5 overflow-hidden">
+                    {/* The actual Card element that will be captured as an image */}
+                    <div
+                      id="prediction-share-card-render"
+                      className="w-[340px] sm:w-[380px] bg-slate-950 p-6 rounded-3xl border border-pink-500/30 flex flex-col gap-4 text-slate-100 relative overflow-hidden select-none text-right shrink-0"
+                      style={{
+                        background: 'linear-gradient(135deg, #090d16 0%, #17102e 50%, #2a0935 100%)',
+                        boxShadow: '0 0 25px rgba(244,63,94,0.12)',
+                      }}
+                      dir="rtl"
+                    >
+                      {/* Design accents */}
+                      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-pink-500/10 via-transparent to-transparent pointer-events-none" />
+                      <div className="absolute -top-10 -right-10 w-40 h-40 bg-pink-500/10 blur-3xl rounded-full" />
+                      <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-purple-500/10 blur-3xl rounded-full" />
+                      
+                      {/* Card Header */}
+                      <div className="flex items-center justify-between border-b border-white/10 pb-4 relative z-10">
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl animate-bounce">⚽</span>
+                          <div className="text-right">
+                            <h4 className="text-sm font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-amber-300 to-yellow-300 Persian-font tracking-tight leading-none">پیش‌بینی جام شادکیو</h4>
+                            <span className="text-[8px] text-slate-400 font-bold tracking-wider block mt-1">OFFICIAL CHAMPIONSHIP CARD</span>
+                          </div>
+                        </div>
+                        <div className="bg-gradient-to-r from-pink-500 to-purple-650 px-2.5 py-1 rounded-full text-[9px] font-black tracking-tight select-none border border-white/10 Persian-font">
+                          🏆 شادکیو جام
+                        </div>
+                      </div>
+
+                      {/* Avatar & User Profile */}
+                      <div className="flex items-center gap-3 bg-white/5 p-3.5 rounded-2xl border border-white/5 relative z-10 select-none">
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-pink-500 via-purple-500 to-amber-400 flex items-center justify-center text-2xl shadow-md border border-white/20 select-none shrink-0">
+                          👑
+                        </div>
+                        <div className="flex-1 text-right">
+                          <p className="text-[10px] text-slate-400 font-semibold select-none leading-none mb-1">کارت پیش‌بینی رسمی</p>
+                          <h4 className="text-sm sm:text-base font-black text-white Persian-font leading-relaxed truncate">{userName || "قهرمان شادکیو"}</h4>
+                        </div>
+                      </div>
+
+                      {/* Golden Champion Prediction */}
+                      <div className="bg-slate-900/80 p-3.5 rounded-2.5xl border border-amber-500/20 flex items-center justify-between relative z-10">
+                        <div className="text-right">
+                          <span className="text-[10px] text-amber-400 font-bold block select-none mb-0.5">پیش‌بینی فاتح مدال طلا و جام مسابقات</span>
+                          <span className="text-xs sm:text-sm font-black text-slate-100 Persian-font block mt-0.5">
+                            {campaignChamp && TEAMS[campaignChamp] ? (
+                              <span className="flex items-center gap-1.5 justify-start">
+                                <span className="text-lg">{TEAMS[campaignChamp].flag}</span>
+                                <span className="text-amber-300 font-extrabold">{TEAMS[campaignChamp].name}</span>
+                              </span>
+                            ) : (
+                              <span className="text-slate-500">انتخاب نشده است</span>
+                            )}
+                          </span>
+                        </div>
+                        <div className="p-2 sm:p-2.5 bg-amber-500/15 rounded-xl text-amber-400 border border-amber-500/20">
+                          🏆
+                        </div>
+                      </div>
+
+                      {/* Favorite & Stats Grid */}
+                      <div className="grid grid-cols-2 gap-2 relative z-10 text-right">
+                        {/* Favorite Team */}
+                        <div className="bg-white/5 p-3 rounded-2xl border border-white/5 flex flex-col justify-between h-20">
+                          <span className="text-[10px] text-slate-400 font-bold select-none block leading-none">تیم محبوب من</span>
+                          <span className="text-xs sm:text-xs font-black text-rose-300 Persian-font block truncate mt-1">
+                            {favoriteTeam && TEAMS[favoriteTeam] ? (
+                              <span className="flex items-center gap-1 justify-start">
+                                <span className="text-base">{TEAMS[favoriteTeam].flag}</span>
+                                <span className="truncate">{TEAMS[favoriteTeam].name}</span>
+                              </span>
+                            ) : (
+                              "هیچکدام (بی‌طرف)"
+                            )}
+                          </span>
+                        </div>
+
+                        {/* Iran enthusiasm status */}
+                        <div className="bg-white/5 p-3 rounded-2xl border border-white/5 flex flex-col justify-between h-20">
+                          <span className="text-[10px] text-pink-400 font-bold select-none block leading-none">شاخص وفاداری به ایران</span>
+                          <div className="mt-1">
+                            <span className="text-xs font-black text-pink-450 Persian-font block">{iranEnthusiasm}٪ تعصب</span>
+                            <div className="w-full bg-white/10 h-1.5 rounded-full mt-1.5 overflow-hidden">
+                              <div className="h-full bg-gradient-to-r from-pink-500 to-purple-500 rounded-full" style={{ width: `${iranEnthusiasm}%` }} />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Additional Achievements and Matches details */}
+                      <div className="bg-white/5 p-3 rounded-2xl border border-white/5 grid grid-cols-2 gap-2 relative z-10 text-right">
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-bold block select-none">پیش‌بینی بازی‌ها</span>
+                          <span className="text-xs sm:text-sm font-black text-white Persian-font">
+                            {matches.filter((m) => m.scoreA !== null && m.scoreB !== null).length} مسابقه
+                          </span>
+                        </div>
+                        <div className="border-r border-white/10 pr-2">
+                          <span className="text-[10px] text-slate-400 font-bold block select-none">نشان‌های افتخار</span>
+                          <span className="text-xs sm:text-sm font-black text-amber-400 Persian-font flex items-center gap-1 justify-start">
+                            🌟 {stats.unlockedCount} نشان
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Footer CTA & scan info */}
+                      <div className="border-t border-white/10 pt-4 mt-1 flex flex-col items-center text-center relative z-10 gap-1 select-none">
+                        <p className="text-[10px] text-transparent bg-clip-text bg-gradient-to-r from-white via-pink-200 to-purple-300 max-w-xs leading-relaxed Persian-font font-bold">
+                          هر روز بیا پیش‌بینی کن و گوشی تلفن همراه برنده شو! 📱🏆
+                        </p>
+                        <div className="text-[8px] bg-white/5 border border-white/15 px-3 py-1 rounded-full text-pink-300 font-bold uppercase tracking-widest Persian-font">
+                          SHADQ JAMEJAHANI
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Export Button */}
+                  <button
+                    id="download-predictions-card-btn"
+                    onClick={downloadPredictionImage}
+                    disabled={isGeneratingImage}
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-gradient-to-r from-pink-500 via-purple-600 to-indigo-650 hover:from-pink-600 hover:to-indigo-750 text-white font-black text-sm duration-200 cursor-pointer shadow-lg shadow-pink-500/10 disabled:opacity-50 select-none border border-white/10 outline-none"
+                  >
+                    {isGeneratingImage ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-white/35 border-t-white rounded-full animate-spin" />
+                        <span>در حال پردازش و تولید فایل تصویر...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>📥 ذخیره و دانلود تصویر کارت پیش‌بینی</span>
+                      </>
+                    )}
+                  </button>
+
+                  <div className="text-center">
+                    <p className="text-[10px] sm:text-xs leading-relaxed text-slate-400">
+                      تصویر در گالری گوشی شما ذخیره خواهد شد. آن را برای دوستان خود بفرستید، استوری کنید یا برای ما ارسال کنید!
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                /* --- ORIGINAL TEXT CODE SHARE TAB --- */
+                <div className="space-y-4">
+                  {/* Section 1: Export Code */}
+                  <div id="code-export-slot" className="bg-slate-900/50 p-4 rounded-2xl border border-white/5 space-y-2.5">
+                    <label className="block text-xs font-semibold text-slate-400 select-none">
+                      کد کپی شده را برای دوستان خود بفرستید تا برگه پیش‌بینی شما را ببینند:
+                    </label>
+                    <textarea
+                      id="share-code-field"
+                      readOnly
+                      value={shareCode}
+                      className="w-full h-18 bg-slate-950 text-slate-300 rounded-xl px-3 py-2 text-[10px] font-mono border border-white/5 focus:outline-none resize-none shadow-inner text-left"
+                      dir="ltr"
+                    />
+                    <button
+                      id="copy-code-btn"
+                      onClick={handleCopyCode}
+                      className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold duration-200 cursor-pointer outline-none ${
+                        codeCopied
+                          ? "bg-gradient-to-r from-pink-500 to-purple-500 text-white shadow"
+                          : "bg-slate-800 text-slate-200 hover:bg-slate-700 border border-white/5"
+                      }`}
+                    >
+                      {codeCopied ? <CheckCircle size={14} /> : <Copy size={14} />}
+                      <span>{codeCopied ? "کد پیش‌بینی کپی شد مظهر خلاقیت!" : "کپی کد به حافظه موقت"}</span>
+                    </button>
+                  </div>
+
+                  {/* Section 2: Import Code */}
+                  <div id="code-import-slot" className="bg-slate-900/50 p-4 rounded-2xl border border-white/5 space-y-2.5 font-bold">
+                    <label className="block text-xs font-semibold text-slate-400 select-none">
+                      کد دریافتی از دوست خود را اینجا قرار دهید تا کارهای او بارگذاری شود:
+                    </label>
+                    <textarea
+                      id="import-text-field"
+                      placeholder="کد پیش‌بینی دریافتی را اینجا پیست کنید..."
+                      value={importCodeText}
+                      onChange={(e) => setImportCodeText(e.target.value)}
+                      className="w-full h-18 bg-slate-950 text-slate-300 rounded-xl px-3 py-2 text-[10px] font-mono border border-white/5 focus:outline-none focus:border-purple-500/30 resize-none shadow-inner text-right"
+                      dir="ltr"
+                    />
+                    <button
+                      id="load-friend-code"
+                      onClick={handleImportCode}
+                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-pink-500 via-purple-600 to-indigo-650 text-white font-bold text-xs duration-200 cursor-pointer outline-none shadow hover:opacity-90"
+                    >
+                      بارگذاری پیش‌بینی دوست
+                    </button>
+                  </div>
+                </div>
+              )}
             </motion.div>
           </div>
         )}
@@ -1994,6 +2484,72 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      {/* ----------------- FLOATING ACTION TOOLBAR ----------------- */}
+      <div id="floating-action-toolbar" className="fixed bottom-20 left-auto right-4 sm:right-8 sm:bottom-8 z-40 flex items-center justify-end pointer-events-none">
+        
+        {/* Predict Today Button (Pill shape) */}
+        <motion.button
+          id="predict-today-toast-fab"
+          onClick={handlePredictTodayBtn}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          className="pointer-events-auto h-14 px-5 rounded-full bg-gradient-to-r from-amber-500 via-orange-500 to-pink-500 text-white font-black text-xs shadow-xl shadow-orange-950/40 border border-white/20 flex items-center gap-2 outline-none select-none Persian-font cursor-pointer hover:brightness-110 active:brightness-95 transition-all"
+        >
+          <span className="text-sm">⚡</span>
+          <span>پیش‌بینی بازی امروز</span>
+        </motion.button>
+      </div>
+
+      {/* ----------------- MOBILE BOTTOM NAV BAR ----------------- */}
+      <nav id="mobile-navigation-tabs" className="sm:hidden fixed bottom-0 left-0 right-0 bg-slate-950/90 backdrop-blur-2xl border-t border-white/10 px-1 py-1 z-40 shadow-2xl flex items-center justify-around h-16 w-full animate-fade-in" dir="rtl">
+        {[
+          { id: "groups", label: "مسابقات", icon: Calendar },
+          { id: "standings", label: "جدول‌ها", icon: Award },
+          { id: "knockout", label: "حذفی", icon: Trophy },
+          { id: "achievements", label: "نشان‌ها", icon: Sparkles },
+          { id: "sportsNews", label: "پخش زنده", icon: Radio },
+          { id: "participants", label: "کاربران", icon: Users },
+          ...(isAdminMode ? [{ id: "adminDashboard", label: "مدیریت", icon: ShieldCheck }] : [])
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+
+          return (
+            <button
+              id={`mobile-tab-btn-${tab.id}`}
+              key={tab.id}
+              onClick={() => {
+                setActiveTab(tab.id as any);
+                const element = document.getElementById("primary-view-container") || document.getElementById("navigation-tabs");
+                if (element) {
+                  element.scrollIntoView({ behavior: "smooth", block: "start" });
+                }
+              }}
+              className={`flex-1 flex flex-col items-center justify-center gap-1 py-1 px-0.5 h-full font-bold duration-150 cursor-pointer outline-none relative transition-all ${
+                isActive ? "text-pink-400 font-black" : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <div className="relative flex items-center justify-center">
+                <Icon size={18} className={isActive ? "text-pink-400 scale-110" : "text-slate-400"} />
+                {tab.id === "achievements" && stats.unlockedCount > 0 && (
+                  <span className="absolute -top-1.5 -right-2 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-gradient-to-tr from-yellow-400 to-amber-500 text-[8px] font-black text-slate-950 animate-pulse">
+                    {stats.unlockedCount}
+                  </span>
+                )}
+              </div>
+              <span className="text-[9px] tracking-tight Persian-font select-none">{tab.label}</span>
+              {isActive && (
+                <motion.div
+                  layoutId="mobileActiveTabIndicator"
+                  className="absolute bottom-0.5 w-6 h-0.5 bg-gradient-to-r from-pink-500 to-purple-500 rounded-full"
+                  transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                />
+              )}
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 }

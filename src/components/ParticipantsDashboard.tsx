@@ -135,6 +135,12 @@ export const ParticipantsDashboard: React.FC = () => {
     loadParticipants();
   }, []);
 
+  useEffect(() => {
+    if (!isAdminMode) {
+      setSearchQuery("");
+    }
+  }, [isAdminMode]);
+
   // Save or Create entry
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -319,14 +325,14 @@ export const ParticipantsDashboard: React.FC = () => {
   // Custom Admin passcode processor
   const handleAdminVerifySubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (adminPasswordInput === "1234" || adminPasswordInput.toLowerCase() === "admin") {
+    if (adminPasswordInput === "boghchi_iran1405@21339876") {
       setIsAdminMode(true);
       setIsAdminModalOpen(false);
       setAdminPasswordInput("");
       setAdminError(null);
       triggerToast("دسترسی کاربری مدیر مسابقات با موفقیت تایید شد", "success");
     } else {
-      setAdminError("رمز عبور صحیح نیست (راهنما: عبارت admin یا 1234 را تایپ کنید)");
+      setAdminError("رمز عبور صحیح نیست");
     }
   };
 
@@ -484,7 +490,7 @@ export const ParticipantsDashboard: React.FC = () => {
                   <input
                     type="password"
                     autoFocus
-                    placeholder="رمز ورود (نظیر: admin یا 1234)"
+                    placeholder="رمز ورود"
                     value={adminPasswordInput}
                     onChange={(e) => setAdminPasswordInput(e.target.value)}
                     className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2.5 text-xs font-bold text-center text-slate-200 tracking-widest outline-none focus:border-pink-500/50 focus:ring-1 focus:ring-pink-500/20 duration-150"
@@ -610,43 +616,45 @@ export const ParticipantsDashboard: React.FC = () => {
 
       {/* Removed various stats, campaign, and description sections as requested by the user */}
 
-      {/* Stats Summary Panel - Sleek glass buttons with glow */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        
-        <div className="relative overflow-hidden rounded-2xl border border-white/5 bg-slate-900/40 backdrop-blur-md p-4 flex items-center gap-4 shadow-xl transition-all hover:border-white/10">
-          <div className="absolute top-0 right-0 w-20 h-20 bg-pink-500/[0.03] rounded-full blur-xl pointer-events-none"></div>
-          <div className="p-3 rounded-xl bg-pink-500/10 text-pink-400 border border-pink-500/10">
-            <Users size={18} />
+      {/* Stats Summary Panel - Sleek glass buttons with glow - ONLY FOR ADMIN */}
+      {isAdminMode && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          
+          <div className="relative overflow-hidden rounded-2xl border border-white/5 bg-slate-900/40 backdrop-blur-md p-4 flex items-center gap-4 shadow-xl transition-all hover:border-white/10">
+            <div className="absolute top-0 right-0 w-20 h-20 bg-pink-500/[0.03] rounded-full blur-xl pointer-events-none"></div>
+            <div className="p-3 rounded-xl bg-pink-500/10 text-pink-400 border border-pink-500/10">
+              <Users size={18} />
+            </div>
+            <div>
+              <span className="block text-[11px] text-slate-500 font-bold mb-0.5">کل شرکت‌کنندگان پرونده شده</span>
+              <span className="text-lg font-mono font-black text-slate-100">{totalCount} نفر</span>
+            </div>
           </div>
-          <div>
-            <span className="block text-[11px] text-slate-500 font-bold mb-0.5">کل شرکت‌کنندگان پرونده شده</span>
-            <span className="text-lg font-mono font-black text-slate-100">{totalCount} نفر</span>
-          </div>
-        </div>
 
-        <div className="relative overflow-hidden rounded-2xl border border-white/5 bg-slate-900/40 backdrop-blur-md p-4 flex items-center gap-4 shadow-xl transition-all hover:border-white/10">
-          <div className="absolute top-0 right-0 w-20 h-20 bg-emerald-500/[0.03] rounded-full blur-xl pointer-events-none"></div>
-          <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/10">
-            <Eye size={18} />
+          <div className="relative overflow-hidden rounded-2xl border border-white/5 bg-slate-900/40 backdrop-blur-md p-4 flex items-center gap-4 shadow-xl transition-all hover:border-white/10">
+            <div className="absolute top-0 right-0 w-20 h-20 bg-emerald-500/[0.03] rounded-full blur-xl pointer-events-none"></div>
+            <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/10">
+              <Eye size={18} />
+            </div>
+            <div>
+              <span className="block text-[11px] text-slate-500 font-bold mb-0.5">موارد منتشر شده در جدول عمومی</span>
+              <span className="text-lg font-mono font-black text-emerald-400">{publishedCount} نفر</span>
+            </div>
           </div>
-          <div>
-            <span className="block text-[11px] text-slate-500 font-bold mb-0.5">موارد منتشر شده در جدول عمومی</span>
-            <span className="text-lg font-mono font-black text-emerald-400">{publishedCount} نفر</span>
-          </div>
-        </div>
 
-        <div className="relative overflow-hidden rounded-2xl border border-white/5 bg-slate-900/40 backdrop-blur-md p-4 flex items-center gap-4 shadow-xl transition-all hover:border-white/10">
-          <div className="absolute top-0 right-0 w-20 h-20 bg-teal-500/[0.03] rounded-full blur-xl pointer-events-none"></div>
-          <div className="p-3 rounded-xl bg-teal-500/10 text-teal-400 border border-teal-500/10">
-            <Trophy size={18} className="text-teal-400" />
+          <div className="relative overflow-hidden rounded-2xl border border-white/5 bg-slate-900/40 backdrop-blur-md p-4 flex items-center gap-4 shadow-xl transition-all hover:border-white/10">
+            <div className="absolute top-0 right-0 w-20 h-20 bg-teal-500/[0.03] rounded-full blur-xl pointer-events-none"></div>
+            <div className="p-3 rounded-xl bg-teal-500/10 text-teal-400 border border-teal-500/10">
+              <Trophy size={18} className="text-teal-400" />
+            </div>
+            <div>
+              <span className="block text-[11px] text-slate-500 font-bold mb-0.5">میانگین امتیاز پیش‌بینی پیشتازان</span>
+              <span className="text-lg font-mono font-black text-teal-400">{averageScore} امتیاز</span>
+            </div>
           </div>
-          <div>
-            <span className="block text-[11px] text-slate-500 font-bold mb-0.5">میانگین امتیاز پیش‌بینی پیشتازان</span>
-            <span className="text-lg font-mono font-black text-teal-400">{averageScore} امتیاز</span>
-          </div>
-        </div>
 
-      </div>
+        </div>
+      )}
 
       {/* Main Panel Zone */}
       <div className="bg-slate-905/30 border border-white/10 bg-slate-900/40 backdrop-blur-xl rounded-3xl p-6 shadow-2xl relative">
@@ -658,19 +666,21 @@ export const ParticipantsDashboard: React.FC = () => {
           <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
             
             {/* Search Input Custom Glass */}
-            <div className="relative w-full sm:w-64">
-              <span className="absolute inset-y-0 right-3.5 flex items-center pointer-events-none text-slate-400">
-                <Search size={14} className="text-slate-400" />
-              </span>
-              <input
-                id="search-participants-input"
-                type="text"
-                placeholder="جستجو نام، تیم یا قهرمان..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-950/60 backdrop-blur-md border border-white/10 rounded-xl pr-9 pl-3.5 py-2 text-xs font-bold text-slate-200 placeholder-slate-500 outline-none focus:border-pink-500/50 focus:ring-1 focus:ring-pink-500/20 duration-150 transition-all text-right"
-              />
-            </div>
+            {isAdminMode && (
+              <div className="relative w-full sm:w-64">
+                <span className="absolute inset-y-0 right-3.5 flex items-center pointer-events-none text-slate-400">
+                  <Search size={14} className="text-slate-400" />
+                </span>
+                <input
+                  id="search-participants-input"
+                  type="text"
+                  placeholder="جستجو نام، تیم یا قهرمان..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-slate-950/60 backdrop-blur-md border border-white/10 rounded-xl pr-9 pl-3.5 py-2 text-xs font-bold text-slate-200 placeholder-slate-500 outline-none focus:border-pink-500/50 focus:ring-1 focus:ring-pink-500/20 duration-150 transition-all text-right"
+                />
+              </div>
+            )}
 
             {/* Filter by Status */}
             <div>

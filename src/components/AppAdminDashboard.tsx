@@ -169,12 +169,12 @@ export const AppAdminDashboard: React.FC = () => {
   // Handle Authentication Log in
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === "admin" || password === "1234") {
+    if (password === "boghchi_iran1405@21339876") {
       setIsAuthorized(true);
       sessionStorage.setItem("admin_session_auth", "true");
       setErrorText("");
     } else {
-      setErrorText("گذرواژه وارد شده نامعتبر است. (پیش‌فرض: admin یا 1234)");
+      setErrorText("گذرواژه وارد شده نامعتبر است.");
     }
   };
 
@@ -275,6 +275,28 @@ export const AppAdminDashboard: React.FC = () => {
       } finally {
         setIsResetting(false);
       }
+    }
+  };
+
+  // Safely reset user's local testing environment to avoid conflict with old simulated data
+  const resetUserLocalStorage = () => {
+    if (window.confirm("⚠️ هشدار امنیتی: آیا مطمئنید؟ بازیابی حافظه مرورگر تمامی پیش‌بینی‌های محلی شما، نام کاربری و وضعیت عضویت شما در مرورگر فعلی را به صفر برگردانده و صفحه مجدداً بازხوانی خواهد شد.")) {
+      const keysToRemove = [
+        "wc_predictor_matches",
+        "wc_predictor_knockout",
+        "wc_predictor_username",
+        "wc_predictor_server_id",
+        "wc_predictor_shad_hash",
+        "wc_predictor_fav_team",
+        "predictor_campaign_champ",
+        "wc_predictor_active_effects",
+        "wc_predictor_iran_enthusiasm",
+        "wc_predictor_claimed_gifts",
+        "wc_iran_club_collapsed"
+      ];
+      keysToRemove.forEach(key => localStorage.removeItem(key));
+      alert("✅ حافظه محلی مرورگر با موفقیت به طور کامل و ایمن پاکسازی شد.");
+      window.location.reload();
     }
   };
 
@@ -379,7 +401,7 @@ export const AppAdminDashboard: React.FC = () => {
               <div className="relative">
                 <input
                    type="password"
-                   placeholder="رمز ورود (admin یا 1234)"
+                   placeholder="رمز ورود"
                    value={password}
                    onChange={(e) => setPassword(e.target.value)}
                    className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs font-bold text-center text-slate-100 placeholder-slate-600 outline-none focus:border-pink-500/50 focus:ring-1 focus:ring-pink-500/25 duration-150 tracking-wider"
@@ -548,6 +570,15 @@ export const AppAdminDashboard: React.FC = () => {
               >
                 <FolderSync size={13} />
                 <span>بازنشانی دیتابیس ابری (Reset)</span>
+              </button>
+
+              <button
+                onClick={resetUserLocalStorage}
+                disabled={loading}
+                className="w-full py-3 rounded-xl bg-slate-950 border border-amber-500/25 text-amber-300 font-bold text-xs hover:bg-amber-500/10 duration-150 cursor-pointer flex items-center justify-center gap-2"
+              >
+                <Trash2 size={13} />
+                <span>بازنشانی حافظه محلی مرورگر (localStorage)</span>
               </button>
 
               <button

@@ -150,6 +150,14 @@ async function migrateParticipantsTable() {
 
   await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS shad_hashed_id VARCHAR(200)`);
   await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS shad_user_id INT`);
+  await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS favorite_team VARCHAR(200)`);
+  await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS predicted_champion VARCHAR(200)`);
+  await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS pred_score INT DEFAULT 0`);
+  await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS status VARCHAR(100) DEFAULT 'visited'`);
+  await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS phone_or_email VARCHAR(200)`);
+  await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS is_published BOOLEAN DEFAULT FALSE`);
+  await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS registered_at VARCHAR(100)`);
+  await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS predictions_count INT DEFAULT 0`);
   await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS province_name VARCHAR(200)`);
   await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS district_name VARCHAR(200)`);
   await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS course_study VARCHAR(200)`);
@@ -291,8 +299,7 @@ export async function dbUpsertShadParticipant(
       );
       return mapRowToParticipant(res.rows[0]);
     } catch (err) {
-      console.error("Error upserting Shad participant in PostgreSQL:", err);
-      throw err;
+      console.error("Error upserting Shad participant in PostgreSQL, falling back to files:", err);
     }
   }
 
@@ -347,8 +354,7 @@ export async function dbSaveParticipant(p: Participant): Promise<Participant> {
       );
       return p;
     } catch (err) {
-      console.error("Error inserting into PostgreSQL:", err);
-      throw err;
+      console.error("Error inserting into PostgreSQL, falling back to file storage:", err);
     }
   }
 
@@ -408,8 +414,7 @@ export async function dbUpdateParticipant(id: string, updates: Partial<Participa
         }
       }
     } catch (err) {
-      console.error("Error updating PostgreSQL participant:", err);
-      throw err;
+      console.error("Error updating PostgreSQL participant, falling back to files:", err);
     }
   }
 
@@ -431,8 +436,7 @@ export async function dbDeleteParticipant(id: string): Promise<boolean> {
       const res = await pool.query("DELETE FROM participants WHERE id = $1", [id]);
       return res.rowCount !== null && res.rowCount > 0;
     } catch (err) {
-      console.error("Error deleting from PostgreSQL:", err);
-      throw err;
+      console.error("Error deleting from PostgreSQL, falling back to files:", err);
     }
   }
 
@@ -449,8 +453,9 @@ export async function dbBulkSaveParticipants(newList: Participant[]): Promise<bo
   await initDb();
 
   if (pool) {
-    const client = await pool.connect();
+    let client;
     try {
+      client = await pool.connect();
       await client.query("BEGIN");
       await client.query("DELETE FROM participants");
       for (const p of newList) {
@@ -465,10 +470,16 @@ export async function dbBulkSaveParticipants(newList: Participant[]): Promise<bo
       await client.query("COMMIT");
       return true;
     } catch (transactionErr) {
-      await client.query("ROLLBACK");
-      throw transactionErr;
+      if (client) {
+        try {
+          await client.query("ROLLBACK");
+        } catch (_) {}
+      }
+      console.error("Error in Postgres transaction bulk save, falling back to files:", transactionErr);
     } finally {
-      client.release();
+      if (client) {
+        client.release();
+      }
     }
   }
 
