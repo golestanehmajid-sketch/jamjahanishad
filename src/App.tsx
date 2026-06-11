@@ -5,16 +5,16 @@
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Team, Match, Group, GroupStanding, Achievement } from "./types";
-import { TEAMS, GROUPS, generateGroupMatches, ACHIEVEMENTS_DATA } from "./data";
+import { TEAMS, GROUPS, generateGroupMatches, ACHIEVEMENTS_DATA, getMatchDay } from "./data";
 import { calculateStandings, simulateMatchScore, checkUnlockedAchievements } from "./utils";
 import { MatchRow } from "./components/MatchRow";
 import { GroupStandings } from "./components/GroupStandings";
 import { KnockoutStage } from "./components/KnockoutStage";
 import { BadgeCard } from "./components/BadgeCard";
 import { TeamFlag } from "./components/TeamFlag";
+import { SoccerLiveTracker } from "./components/SoccerLiveTracker";
 import { IranSupporterHub } from "./components/IranSupporterHub";
 import { TeensGiftHub } from "./components/TeensGiftHub";
-import { SoccerLiveTracker } from "./components/SoccerLiveTracker";
 import { ParticipantsDashboard } from "./components/ParticipantsDashboard";
 import { AppAdminDashboard } from "./components/AppAdminDashboard";
 import { trackUserAction } from "./utils/tracker";
@@ -191,6 +191,8 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<"groups" | "standings" | "knockout" | "achievements" | "sportsNews" | "participants" | "adminDashboard">("groups");
   const [selectedGroupFilter, setSelectedGroupFilter] = useState<string>("A");
+  const [matchViewMode, setMatchViewMode] = useState<"daily" | "groups">("daily");
+  const [selectedDay, setSelectedDay] = useState<number>(1);
   
   // Simulation alert details
   const [simulationNotice, setSimulationNotice] = useState<string | null>(null);
@@ -242,6 +244,7 @@ export default function App() {
       standings: "جدول‌های تفکیکی رده‌بندی 📊",
       knockout: "نمودار مرحله حذفی 🏆",
       achievements: "نشان‌ها و دستاوردهای من 🏅",
+      sportsNews: "اخبار و پخش زنده 📺",
       participants: "جدول کارشناسی شرکت‌کنندگان 👥",
       adminDashboard: "پنل مدیریت ابری ⚡"
     };
@@ -475,195 +478,89 @@ export default function App() {
   // ----------------------------------------------------
   // Live Official World Cup Match Sync Mechanics
   // ----------------------------------------------------
-  const [isLiveMode, setIsLiveMode] = useState<boolean>(() => {
-    return localStorage.getItem("wc_predictor_live_mode") === "true";
-  });
+  const isLiveMode = true;
 
   useEffect(() => {
-    localStorage.setItem("wc_predictor_live_mode", String(isLiveMode));
-  }, [isLiveMode]);
-
-  const handleToggleLiveMode = (enableLive: boolean) => {
-    setIsLiveMode(enableLive);
-    if (enableLive) {
-      // 1. Back up current user predictions to prevent loss
-      const backupPayload = matches.map((m) => ({ id: m.id, scoreA: m.scoreA, scoreB: m.scoreB }));
-      localStorage.setItem("wc_predictor_predictions_bak", JSON.stringify(backupPayload));
-
-      // 2. Override and lock live official matches representing 2026 World Cup
-      const updated = applyOfficialScores(matches);
-      setMatches(updated);
-      showNotice("🟢 حالت ردیاب نتایج واقعی فعال شد! بازی‌های انجام شده قفل شدند تا به آمار نهایی تکیه کنید.");
-    } else {
-      // Restore user predictions from backup
-      const backupStr = localStorage.getItem("wc_predictor_predictions_bak");
-      if (backupStr) {
-        try {
-          const parsedBackup: { id: string; scoreA: number | null; scoreB: number | null }[] = JSON.parse(backupStr);
-          setMatches((prev) =>
-            prev.map((m) => {
-              const bak = parsedBackup.find((b) => b.id === m.id);
-              if (bak) {
-                return {
-                  ...m,
-                  scoreA: bak.scoreA,
-                  scoreB: bak.scoreB,
-                  isOfficial: false,
-                  isLive: false,
-                  minute: undefined,
-                };
-              }
-              return { ...m, isOfficial: false, isLive: false, minute: undefined };
-            })
-          );
-          showNotice("🔮 به شبیه‌ساز پیش‌بینی آزاد برگشتید! مجدد می‌توانید مسابقات را دستکاری کنید.");
-        } catch (e) {
-          console.error("Error restoring predictions backup", e);
-          setMatches((prev) => prev.map((m) => ({ ...m, isOfficial: false, isLive: false, minute: undefined })));
-        }
-      } else {
-        setMatches((prev) => prev.map((m) => ({ ...m, isOfficial: false, isLive: false, minute: undefined })));
-      }
-    }
-  };
-
-  const applyOfficialScores = (currentMatches: Match[]): Match[] => {
-    const officialResults: Record<string, { scoreA: number; scoreB: number; isOfficial?: boolean; isLive?: boolean; minute?: number }> = {
-      // Group A
-      "G-A-1": { scoreA: 2, scoreB: 1, isOfficial: true },
-      "G-A-2": { scoreA: 1, scoreB: 1, isOfficial: true },
-      "G-A-3": { scoreA: 1, scoreB: 0, isOfficial: true },
-      "G-A-4": { scoreA: 0, scoreB: 2, isOfficial: true },
-      "G-A-5": { scoreA: 1, scoreB: 2, isOfficial: true },
-      "G-A-6": { scoreA: 1, scoreB: 2, isOfficial: true },
-      // Group B
-      "G-B-1": { scoreA: 1, scoreB: 0, isOfficial: true },
-      "G-B-2": { scoreA: 0, scoreB: 2, isOfficial: true },
-      "G-B-3": { scoreA: 1, scoreB: 1, isOfficial: true },
-      "G-B-4": { scoreA: 0, scoreB: 2, isOfficial: true },
-      "G-B-5": { scoreA: 2, scoreB: 1, isOfficial: true },
-      "G-B-6": { scoreA: 1, scoreB: 1, isOfficial: true },
-      // Group C
-      "G-C-1": { scoreA: 2, scoreB: 1, isOfficial: true },
-      "G-C-2": { scoreA: 0, scoreB: 2, isOfficial: true },
-      "G-C-3": { scoreA: 4, scoreB: 0, isOfficial: true },
-      "G-C-4": { scoreA: 1, scoreB: 0, isOfficial: true },
-      "G-C-5": { scoreA: 0, scoreB: 3, isOfficial: true },
-      "G-C-6": { scoreA: 2, scoreB: 0, isOfficial: true },
-      // Group D
-      "G-D-1": { scoreA: 2, scoreB: 1, isOfficial: true },
-      "G-D-2": { scoreA: 1, scoreB: 2, isOfficial: true },
-      "G-D-3": { scoreA: 3, scoreB: 1, isOfficial: true },
-      "G-D-4": { scoreA: 1, scoreB: 1, isOfficial: true },
-      "G-D-5": { scoreA: 2, scoreB: 2, isOfficial: true },
-      "G-D-6": { scoreA: 0, scoreB: 1, isOfficial: true },
-      // Group E
-      "G-E-1": { scoreA: 4, scoreB: 0, isOfficial: true },
-      "G-E-2": { scoreA: 1, scoreB: 1, isOfficial: true },
-      "G-E-3": { scoreA: 2, scoreB: 1, isOfficial: true },
-      "G-E-4": { scoreA: 0, scoreB: 2, isOfficial: true },
-      "G-E-5": { scoreA: 1, scoreB: 3, isOfficial: true },
-      "G-E-6": { scoreA: 1, scoreB: 3, isOfficial: true },
-      // Group F
-      "G-F-1": { scoreA: 1, scoreB: 1, isOfficial: true },
-      "G-F-2": { scoreA: 2, scoreB: 1, isOfficial: true },
-      "G-F-3": { scoreA: 2, scoreB: 1, isOfficial: true },
-      "G-F-4": { scoreA: 2, scoreB: 0, isOfficial: true },
-      "G-F-5": { scoreA: 0, scoreB: 2, isOfficial: true },
-      "G-F-6": { scoreA: 2, scoreB: 2, isOfficial: true },
-      // Group G (belgium egypt iran newzealand) - Iran's Group and live match G-G-6 (Egypt vs Iran)
-      "G-G-1": { scoreA: 2, scoreB: 1, isOfficial: true },
-      "G-G-2": { scoreA: 2, scoreB: 0, isOfficial: true },
-      "G-G-3": { scoreA: 1, scoreB: 1, isOfficial: true },
-      "G-G-4": { scoreA: 3, scoreB: 0, isOfficial: true },
-      "G-G-5": { scoreA: 0, scoreB: 3, isOfficial: true },
-      "G-G-6": { scoreA: 1, scoreB: 2, isLive: true, minute: 76 },
-      // Group H
-      "G-H-1": { scoreA: 3, scoreB: 0, isOfficial: true },
-      "G-H-2": { scoreA: 1, scoreB: 2, isOfficial: true },
-      "G-H-3": { scoreA: 3, scoreB: 1, isOfficial: true },
-      "G-H-4": { scoreA: 0, scoreB: 2, isOfficial: true },
-      "G-H-5": { scoreA: 1, scoreB: 1, isOfficial: true },
-      "G-H-6": { scoreA: 1, scoreB: 2, isOfficial: true },
-      // Group I
-      "G-I-1": { scoreA: 2, scoreB: 1, isOfficial: true },
-      "G-I-2": { scoreA: 0, scoreB: 2, isOfficial: true },
-      "G-I-3": { scoreA: 3, scoreB: 0, isOfficial: true },
-      "G-I-4": { scoreA: 1, scoreB: 2, isOfficial: true },
-      "G-I-5": { scoreA: 1, scoreB: 2, isOfficial: true },
-      "G-I-6": { scoreA: 2, scoreB: 1, isOfficial: true },
-      // Group J
-      "G-J-1": { scoreA: 2, scoreB: 0, isOfficial: true },
-      "G-J-2": { scoreA: 3, scoreB: 1, isOfficial: true },
-      "G-J-3": { scoreA: 2, scoreB: 1, isOfficial: true },
-      "G-J-4": { scoreA: 2, scoreB: 0, isOfficial: true },
-      "G-J-5": { scoreA: 0, scoreB: 4, isOfficial: true },
-      "G-J-6": { scoreA: 1, scoreB: 2, isOfficial: true },
-      // Group K
-      "G-K-1": { scoreA: 3, scoreB: 1, isOfficial: true },
-      "G-K-2": { scoreA: 1, scoreB: 2, isOfficial: true },
-      "G-K-3": { scoreA: 2, scoreB: 0, isOfficial: true },
-      "G-K-4": { scoreA: 1, scoreB: 3, isOfficial: true },
-      "G-K-5": { scoreA: 1, scoreB: 1, isOfficial: true },
-      "G-K-6": { scoreA: 1, scoreB: 2, isOfficial: true },
-      // Group L
-      "G-L-1": { scoreA: 1, scoreB: 1, isOfficial: true },
-      "G-L-2": { scoreA: 2, scoreB: 1, isOfficial: true },
-      "G-L-3": { scoreA: 3, scoreB: 1, isOfficial: true },
-      "G-L-4": { scoreA: 2, scoreB: 0, isOfficial: true },
-      "G-L-5": { scoreA: 0, scoreB: 4, isOfficial: true },
-      "G-L-6": { scoreA: 2, scoreB: 1, isOfficial: true },
+    // High-fidelity matching helper to pair static teams with scraped teams
+    const matchTeamEn = (team: { name: string; nameEn: string }, scraped: { name: string; nameEn?: string }) => {
+      if (scraped.nameEn && team.nameEn && scraped.nameEn.toLowerCase() === team.nameEn.toLowerCase()) return true;
+      if (scraped.name && team.name && scraped.name.trim() === team.name.trim()) return true;
+      const norm = (s: string) => s.replace(/\s+/g, "").toLowerCase();
+      if (scraped.nameEn && team.nameEn && norm(scraped.nameEn) === norm(team.nameEn)) return true;
+      if (scraped.name && team.name && norm(scraped.name) === norm(team.name)) return true;
+      return false;
     };
 
-    return currentMatches.map((m) => {
-      const res = officialResults[m.id];
-      if (res) {
-        return {
-          ...m,
-          scoreA: res.scoreA,
-          scoreB: res.scoreB,
-          isOfficial: res.isOfficial || false,
-          isLive: res.isLive || false,
-          minute: res.minute,
-        };
-      }
-      return m;
-    });
-  };
-
-  const handleTickLiveMatch = () => {
-    setMatches((prev) =>
-      prev.map((m) => {
-        if (m.isLive) {
-          const nextMin = Math.min(90, (m.minute || 76) + Math.floor(Math.random() * 3) + 1);
-          let nA = m.scoreA ?? 0;
-          let nB = m.scoreB ?? 0;
-          if (nextMin === 90) {
-            showNotice("🔔 سوت پایان بازی! پیروزی شیرین و تاریخی مل‌پوشان ایران در برابر مصر ثبت شد! 🇮🇷🎉");
-          } else if (Math.random() > 0.65) {
-            if (Math.random() > 0.4) {
-              nB += 1; // Team B is Iran in Egypt (A) vs Iran (B)
-              showNotice("⚽ گل برای ایران! یوزهای ایرانی استادیوم را منفجر کردند! 🔥🦅");
-            } else {
-              nA += 1; // Team A is Egypt
-              showNotice("⚽ گل برای مصر! ریتم حمله حریف شدت گرفت.");
+    const autoSyncWithLiveScore = async () => {
+      try {
+        const res = await fetch("/api/sports-hub/livescore");
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json.success && json.data) {
+          let extractedMatches: any[] = [];
+          for (const league of json.data) {
+            for (const dateObj of league.dates || []) {
+              for (const scrapedMatch of dateObj.matches || []) {
+                extractedMatches.push(scrapedMatch);
+              }
             }
-          } else {
-            showNotice(`⏱️ دقیقه ${nextMin}' نبرد شدید و جذاب در جریان بازی گروه G ادامه دارد.`);
           }
-          return {
-            ...m,
-            minute: nextMin,
-            scoreA: nA,
-            scoreB: nB,
-            isLive: nextMin < 90,
-            isOfficial: nextMin >= 90,
-          };
+
+          if (extractedMatches.length > 0) {
+            setMatches((prevMatches) => {
+              let changed = false;
+              const updated = prevMatches.map((m) => {
+                const scraped = extractedMatches.find((sm) => {
+                  const hostOk = matchTeamEn(m.teamA, sm.host) && matchTeamEn(m.teamB, sm.guest);
+                  const reversedOk = matchTeamEn(m.teamA, sm.guest) && matchTeamEn(m.teamB, sm.host);
+                  return hostOk || reversedOk;
+                });
+
+                if (scraped) {
+                  const isReversed = matchTeamEn(m.teamA, scraped.guest);
+                  const goalsA = isReversed ? scraped.guestGoals : scraped.hostGoals;
+                  const goalsB = isReversed ? scraped.hostGoals : scraped.guestGoals;
+
+                  // scraped.status: 1 = live, 2 = finished, 3 = scheduled
+                  if (scraped.status === 2 && (!m.isOfficial || m.scoreA !== goalsA || m.scoreB !== goalsB)) {
+                    changed = true;
+                    return {
+                      ...m,
+                      scoreA: goalsA !== null ? goalsA : m.scoreA,
+                      scoreB: goalsB !== null ? goalsB : m.scoreB,
+                      isOfficial: true,
+                      isLive: false,
+                    };
+                  } else if (scraped.status === 1 && (!m.isLive || m.scoreA !== goalsA || m.scoreB !== goalsB || m.minute !== scraped.minute)) {
+                    changed = true;
+                    return {
+                      ...m,
+                      scoreA: goalsA !== null ? goalsA : m.scoreA,
+                      scoreB: goalsB !== null ? goalsB : m.scoreB,
+                      isOfficial: false,
+                      isLive: true,
+                      minute: scraped.minute || 84,
+                    };
+                  }
+                }
+                return m;
+              });
+
+              return changed ? updated : prevMatches;
+            });
+          }
         }
-        return m;
-      })
-    );
-  };
+      } catch (err) {
+        console.warn("Background syncing matches offline or API unreachable:", err);
+      }
+    };
+
+    autoSyncWithLiveScore();
+    const interval = setInterval(autoSyncWithLiveScore, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+
 
   const handleSaveName = () => {
     if (tempName.trim()) {
@@ -1280,85 +1177,7 @@ export default function App() {
 
 
 
-      {/* ----------------- LIVE SCORE TRACKER SWITCHER PANEL ----------------- */}
-      <section id="live-sync-panel" className="max-w-6xl mx-auto w-full px-4 pt-6 select-none animate-fade-in">
-        <div className={`border rounded-2xl p-4 sm:p-5 backdrop-blur-md transition-all duration-300 ${
-          isLiveMode 
-            ? "bg-emerald-950/10 border-emerald-500/30 shadow-lg shadow-emerald-950/20" 
-            : "bg-slate-900/60 border-white/5"
-        }`}>
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            
-            {/* Header info */}
-            <div className="flex items-start gap-3">
-              <div className={`p-2.5 rounded-xl flex items-center justify-center transition-colors ${
-                isLiveMode ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-800 text-slate-400"
-              }`}>
-                <Calendar size={20} className={isLiveMode ? "animate-pulse" : ""} />
-              </div>
-              <div className="text-right">
-                <h3 className="text-sm font-extrabold text-white flex items-center gap-2 justify-start">
-                  <span>ردیاب و همگام‌ساز زنده جام جهانی ۲۰۲۶</span>
-                  {isLiveMode && (
-                    <span className="inline-flex items-center gap-1 bg-red-500/15 border border-red-500/25 text-[9px] text-red-400 px-2.5 py-0.5 rounded-full font-bold animate-pulse font-mono">
-                      <span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span>
-                      لایو فعال
-                    </span>
-                  )}
-                </h3>
-                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                  {isLiveMode 
-                    ? "مراحل و بازی‌های برگزارشده به صورت رسمی قفل شدند تا بتوانید با داده‌های حقیقی، جداول صعود را آنالیز کنید." 
-                    : "در حال استفاده از حالت پیش‌بینی آزاد. در این حالت می‌توانید نتایج تمام مسابقات را خودتان شبیه‌سازی و تغییر دهید."}
-                </p>
-              </div>
-            </div>
 
-            {/* Controller actions */}
-            <div className="flex flex-wrap items-center gap-3 md:justify-end">
-              {/* Toggle switcher */}
-              <div className="flex items-center bg-slate-950/90 rounded-xl p-1 border border-white/5">
-                <button
-                  id="live-mode-off-btn"
-                  onClick={() => handleToggleLiveMode(false)}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold duration-150 cursor-pointer outline-none transition-all ${
-                    !isLiveMode 
-                      ? "bg-slate-800 text-pink-400 shadow" 
-                      : "text-slate-400 hover:text-slate-200"
-                  }`}
-                >
-                  🔮 پیش‌بینی آزاد
-                </button>
-                <button
-                  id="live-mode-on-btn"
-                  onClick={() => handleToggleLiveMode(true)}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold duration-150 cursor-pointer outline-none flex items-center gap-1 transition-all ${
-                    isLiveMode 
-                      ? "bg-emerald-500/20 text-emerald-400 shadow border border-emerald-500/20" 
-                      : "text-slate-400 hover:text-slate-200"
-                  }`}
-                >
-                  🟢 ردیاب رسمی زنده
-                </button>
-              </div>
-
-              {/* Ticking live action */}
-              {isLiveMode && matches.some(m => m.isLive) && (
-                <button
-                  id="tick-live-score-btn"
-                  onClick={handleTickLiveMatch}
-                  className="bg-gradient-to-r from-red-500/25 to-pink-500/25 hover:from-red-500/35 hover:to-pink-500/35 text-red-300 font-bold px-3.5 py-2 rounded-xl border border-red-500/30 text-xs flex items-center gap-1.5 active:scale-95 duration-150 cursor-pointer shadow-lg shadow-red-950/20 animate-pulse outline-none"
-                  title="شبیه‌سازی گذر زمان و تحولات زنده بازی فعال ایران"
-                >
-                  <RotateCcw size={13} className="animate-spin duration-1000" />
-                  <span>⏱️ تحولات دقایق بعد بازی زنده</span>
-                </button>
-              )}
-            </div>
-
-          </div>
-        </div>
-      </section>
 
       {/* ----------------- MODERN TABS NAVIGATION ----------------- */}
       <nav id="navigation-tabs" className="max-w-6xl mx-auto w-full px-4 pt-6">
@@ -1368,6 +1187,7 @@ export default function App() {
             { id: "standings", label: "جدول‌های تفکیکی رده‌بندی", icon: Award },
             { id: "knockout", label: "نمودار مرحله حذفی (پلی‌آف)", icon: Trophy },
             { id: "achievements", label: "نشان‌ها و دستاوردهای من", icon: Sparkles },
+            { id: "sportsNews", label: "اخبار و پخش زنده", icon: Radio },
             { id: "participants", label: "جدول کارشناسی شرکت‌کنندگان", icon: Users },
             ...(isAdminMode ? [{ id: "adminDashboard", label: "⚡ پنل مدیریت ابری", icon: ShieldCheck }] : [])
           ].map((tab) => {
@@ -1487,92 +1307,151 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Group filter slide buttons */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-slate-900/40 p-3 rounded-2xl border border-white/5">
-                <div className="flex flex-wrap items-center gap-1.5 justify-center font-bold">
-                  <span className="text-xs font-bold text-slate-400 ml-2 select-none leading-none">انتخاب گروه:</span>
-                  {Object.keys(GROUPS).map((gId) => (
-                    <button
-                      id={`group-pill-${gId}`}
-                      key={gId}
-                      onClick={() => setSelectedGroupFilter(gId)}
-                      className={`w-9 h-9 rounded-xl font-bold font-mono text-sm duration-150 flex items-center justify-center cursor-pointer outline-none transition-all ${
-                        selectedGroupFilter === gId
-                          ? "bg-gradient-to-tr from-pink-500 via-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-500/25 font-black"
-                          : "bg-slate-904 bg-slate-900 border border-white/5 text-slate-300 hover:bg-slate-850 hover:text-white"
-                      }`}
-                    >
-                      {gId}
-                    </button>
-                  ))}
+              {/* 🔄 Unified Compact View Switcher Header */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-900/30 border border-white/5 p-4 rounded-2xl" dir="rtl">
+                <div className="flex items-center gap-2 text-right select-none">
+                  <span className="w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-pink-500 via-purple-600 to-indigo-600 animate-pulse"></span>
+                  <p className="text-xs sm:text-sm font-black text-slate-200 font-sans Persian-font">
+                    {matchViewMode === "daily" 
+                      ? "پیش‌بینی سریع روزانه" 
+                      : "پیش‌بینی کل گروه‌ها و جدول رده‌بندی زنده"
+                    }
+                  </p>
                 </div>
 
-                {/* Instant Actions for teens */}
-                <div className="flex flex-wrap items-center justify-center gap-2">
-                  {!isLiveMode ? (
-                    <>
-                      <button
-                        id="sim-group-btn"
-                        onClick={() => handleSimulateGroup(selectedGroupFilter)}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-pink-500/10 hover:bg-pink-500/25 text-pink-400 border border-pink-500/30 text-xs font-extrabold duration-150 cursor-pointer active:scale-95 outline-none transition-all"
-                        title="پیش‌بینی شبیه‌سازی برای کل ۶ بازی این گروه"
-                      >
-                        <Dices size={14} />
-                        <span>شبیه‌سازی کل گروه {selectedGroupFilter}</span>
-                      </button>
-                      
-                      <button
-                        id="sim-all-btn"
-                        onClick={handleSimulateAllGroupMatches}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-400 border border-purple-500/30 text-xs font-extrabold duration-150 cursor-pointer active:scale-95 outline-none transition-all"
-                        title="شبیه‌سازی تمام بازی‌های کل مرحله گروهی جام"
-                      >
-                        <Sparkles size={14} />
-                        <span>شبیه‌سازی کل ۷۲ بازی</span>
-                      </button>
-
-                      <button
-                        id="reset-btn"
-                        onClick={handleResetMatches}
-                        className="p-2 rounded-xl bg-slate-900 text-slate-400 hover:bg-red-500/20 hover:border-red-500/30 hover:text-red-400 border border-white/5 duration-150 cursor-pointer outline-none transition-all"
-                        title="پاک کردن تمام نتایج و بازنشانی"
-                      >
-                        <RotateCcw size={14} />
-                      </button>
-                    </>
-                  ) : (
-                    <div className="flex items-center gap-1.5 bg-emerald-950/25 border border-emerald-500/25 px-3 py-2 rounded-xl text-emerald-400 text-xs font-bold select-none decoration-transparent">
-                      🔒 حالت نتایج رسمی فعال است
-                    </div>
-                  )}
-
+                <div className="flex items-center bg-slate-950/80 border border-white/10 p-1 rounded-xl shadow-inner font-sans shrink-0 max-w-full overflow-hidden">
                   <button
-                    id="share-btn"
-                    onClick={handleGenerateShareCode}
-                    className="flex items-center gap-1 px-3 py-2 rounded-xl bg-gradient-to-r from-pink-500 via-purple-600 to-indigo-600 text-white font-bold text-xs duration-150 hover:opacity-95 active:scale-95 cursor-pointer outline-none shadow shadow-purple-500/20 transition-all"
+                    type="button"
+                    onClick={() => setMatchViewMode("daily")}
+                    className={`px-4 py-2 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 focus:outline-none select-none ${
+                      matchViewMode === "daily"
+                        ? "bg-gradient-to-r from-pink-500 via-purple-600 to-indigo-600 text-white shadow-lg font-black"
+                        : "text-slate-400 hover:text-white"
+                    }`}
                   >
-                    <Share2 size={13} />
-                    <span>اشتراک‌گذاری</span>
+                    <Calendar size={13} />
+                    <span>برنامه روزانه</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMatchViewMode("groups")}
+                    className={`px-4 py-2 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 focus:outline-none select-none ${
+                      matchViewMode === "groups"
+                        ? "bg-gradient-to-r from-pink-500 via-purple-600 to-indigo-600 text-white shadow-lg font-black"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    <Trophy size={13} />
+                    <span>جدول گروه‌ها</span>
                   </button>
                 </div>
               </div>
 
-              {/* Grid content split: matches left, standing dynamic preview right */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-                
-                {/* Active Group Matches List */}
-                <div id="active-matches-stack" className="lg:col-span-2 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-base font-black text-slate-200 flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 bg-pink-500 rounded-full animate-pulse"></span>
-                      <span>بازی‌های پیش‌بینی گروه {selectedGroupFilter}</span>
-                    </h3>
-                    <span className="text-xs text-slate-400 select-none font-medium">۶ بازی در کل</span>
+              {/* BRANCH 1: DAILY MATCHES (Focused, Mobile-friendly, Day-by-Day scroll) */}
+              {matchViewMode === "daily" && (
+                <div id="daily-predictor-section" className="space-y-5 animate-fade-in text-right" dir="rtl">
+                  <div className="bg-slate-950/60 p-4 rounded-2xl border border-white/5 space-y-3">
+                    <span className="text-[10px] bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 font-extrabold px-2.5 py-1 rounded-md block w-fit Persian-font select-none">
+                      فیلتر روزانه مرحله گروهی ⚡
+                    </span>
+                    <h4 className="text-xs sm:text-sm font-bold text-slate-300 leading-relaxed Persian-font">
+                      مرحله گروهی جام جهانی شامل ۷۲ بازی پرهیجان است.
+                    </h4>
+
+                    {/* Horizontal scrollable slider of 12 Match Days */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-2 pt-1 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
+                      {Array.from({ length: 12 }).map((_, i) => {
+                        const dayNum = i + 1;
+                        const isSelected = selectedDay === dayNum;
+                        return (
+                          <button
+                            key={dayNum}
+                            id={`daily-day-pill-${dayNum}`}
+                            onClick={() => setSelectedDay(dayNum)}
+                            className={`px-4 py-2 text-xs font-black rounded-xl duration-150 transition-all cursor-pointer select-none shrink-0 min-w-[70px] text-center ${
+                              isSelected
+                                ? "bg-gradient-to-r from-pink-500 via-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-500/20 border border-purple-500/30"
+                                : "bg-slate-900 border border-white/5 text-slate-400 hover:bg-slate-850 hover:text-white"
+                            }`}
+                          >
+                            روز {String(dayNum).replace(/[0-9]/g, c => "۰۱۲۳۴۵۶۷۸۹"[+c])}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
-                  <div id="matches-container" className="space-y-3.5">
+                  {/* Actions for Daily View */}
+                  <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-slate-900/40 p-4 rounded-2xl border border-white/5">
+                    <div className="text-right">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 bg-rose-500 rounded-full animate-pulse shrink-0"></span>
+                        <h4 className="text-sm font-black text-rose-400 Persian-font">
+                          دیدارهای روز {String(selectedDay).replace(/[0-9]/g, c => "۰۱۲۳۴۵۶۷۸۹"[+c])} مقدماتی گروهی
+                        </h4>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
+                        ۶ بازی همزمان در گروه‌های مختلف. برای پیش‌بینی خودکار و سریع، می‌توانید از دکمه شبیه‌سازی هوشمند استفاده کنید.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-center md:justify-end gap-2 shrink-0">
+                      {!isLiveMode ? (
+                        <>
+                          <button
+                            type="button"
+                            id="simulate-active-day-btn"
+                            onClick={() => {
+                              const dayMatches = matches.filter(m => getMatchDay(m.id) === selectedDay);
+                              dayMatches.forEach(m => handleSimulateMatch(m.id));
+                              if (typeof showNotice === "function") {
+                                showNotice(`🎲 تمام بازی‌های روز ${String(selectedDay).replace(/[0-9]/g, c => "۰۱۲۳۴۵۶۷۸۹"[+c])} با تکیه بر الگوریتم‌های قدرت شبیه‌سازی شدند!`);
+                              } else {
+                                setSimulationNotice(`🎲 تمام بازی‌های روز ${String(selectedDay).replace(/[0-9]/g, c => "۰۱۲۳۴۵۶۷۸۹"[+c])} شبیه‌سازی شدند!`);
+                              }
+                            }}
+                            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-pink-500/10 hover:bg-pink-500/20 text-pink-400 border border-pink-500/25 text-xs font-black duration-150 cursor-pointer active:scale-95 transition-all focus:outline-none"
+                          >
+                            <Dices size={13} />
+                            <span>شبیه‌سازی هوشمند بازی‌های روز {String(selectedDay).replace(/[0-9]/g, c => "۰۱۲۳۴۵۶۷۸۹"[+c])}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            id="reset-active-day-btn"
+                            onClick={() => {
+                              const dayMatches = matches.filter(m => getMatchDay(m.id) === selectedDay);
+                              dayMatches.forEach(m => handleScoreChange(m.id, null, null));
+                              if (typeof showNotice === "function") {
+                                showNotice(`🔄 پیش‌بینی‌های روز ${String(selectedDay).replace(/[0-9]/g, c => "۰۱۲۳۴۵۶۷۸۹"[+c])} با موفقیت پاک شدند.`);
+                              } else {
+                                setSimulationNotice(`🔄 پیش‌بینی‌های روز ${String(selectedDay).replace(/[0-9]/g, c => "۰۱۲۳۴۵۶۷۸۹"[+c])} حذف شدند.`);
+                              }
+                            }}
+                            className="p-2.5 rounded-xl bg-slate-900 text-slate-400 hover:bg-red-500/20 hover:border-red-500/30 hover:text-red-400 border border-white/5 duration-150 cursor-pointer focus:outline-none transition-all"
+                            title="پاک کردن نتایج مسابقات روز جاری"
+                          >
+                            <RotateCcw size={14} />
+                          </button>
+                        </>
+                      ) : null}
+
+                      <button
+                        type="button"
+                        id="share-active-day-btn"
+                        onClick={handleGenerateShareCode}
+                        className="flex items-center gap-1 px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 via-purple-600 to-indigo-600 text-white font-black text-xs duration-150 hover:opacity-95 active:scale-95 cursor-pointer focus:outline-none shadow shadow-purple-500/20 transition-all"
+                      >
+                        <Share2 size={13} />
+                        <span>اشتراک‌گذاری</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* List of 6 Matches on selected day - beautifully side-by-side or stacked */}
+                  <div className="grid grid-cols-1 gap-4">
                     {matches
-                      .filter((m) => m.group === selectedGroupFilter)
+                      .filter((m) => getMatchDay(m.id) === selectedDay)
                       .map((m) => {
                         const isFavMatch = favoriteTeam && (m.teamA.id === favoriteTeam || m.teamB.id === favoriteTeam);
                         const hasNeonGold = activeEffects.gift_ball;
@@ -1580,7 +1459,7 @@ export default function App() {
                           <div
                             id={`match-row-wrapper-${m.id}`}
                             key={m.id}
-                            className={`rounded-xl transition-all duration-300 ${
+                            className={`rounded-2xl transition-all duration-300 ${
                               isFavMatch
                                 ? "ring-2 ring-purple-500/60 relative shadow-xl shadow-purple-500/10 overflow-hidden"
                                 : ""
@@ -1599,59 +1478,161 @@ export default function App() {
                               match={m}
                               onScoreChange={handleScoreChange}
                               onSimulate={handleSimulateMatch}
+                              displayDay={false}
                             />
                           </div>
                         );
                       })}
                   </div>
                 </div>
+              )}
 
-                {/* Right side live standing preview widget */}
-                <div id="group-standings-preview" className="lg:col-span-1 space-y-4">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 bg-pink-500 rounded-full animate-pulse"></span>
-                    <h3 className="text-base font-black text-slate-200">وضعیت زنده گروه {selectedGroupFilter}</h3>
+              {/* BRANCH 2: FULL TRADITIONAL GROUPS VIEW (A-L selection and Tables) */}
+              {matchViewMode === "groups" && (
+                <div id="full-groups-predictor-section" className="space-y-6 animate-fade-in">
+                  
+                  {/* Group filter slide buttons */}
+                  <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-slate-900/40 p-3 rounded-2xl border border-white/5" dir="rtl">
+                    <div className="flex flex-wrap items-center gap-1.5 justify-center font-bold">
+                      <span className="text-xs font-bold text-slate-400 ml-2 select-none leading-none">انتخاب گروه:</span>
+                      {Object.keys(GROUPS).map((gId) => (
+                        <button
+                          id={`group-pill-${gId}`}
+                          key={gId}
+                          onClick={() => setSelectedGroupFilter(gId)}
+                          className={`w-9 h-9 rounded-xl font-bold font-mono text-sm duration-150 flex items-center justify-center cursor-pointer outline-none transition-all ${
+                            selectedGroupFilter === gId
+                              ? "bg-gradient-to-tr from-pink-500 via-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-500/25 font-black"
+                              : "bg-slate-900 border border-white/5 text-slate-300 hover:bg-slate-850 hover:text-white"
+                          }`}
+                        >
+                          {gId}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Instant Actions for teens */}
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      {!isLiveMode ? (
+                        <>
+                          <button
+                            id="sim-group-btn"
+                            onClick={() => handleSimulateGroup(selectedGroupFilter)}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-pink-500/10 hover:bg-pink-500/25 text-pink-400 border border-pink-500/30 text-xs font-extrabold duration-150 cursor-pointer active:scale-95 outline-none transition-all"
+                            title="پیش‌بینی شبیه‌سازی برای کل ۶ بازی این گروه"
+                          >
+                            <Dices size={14} />
+                            <span>شبیه‌سازی کل گروه {selectedGroupFilter}</span>
+                          </button>
+                          
+                          <button
+                            id="sim-all-btn"
+                            onClick={handleSimulateAllGroupMatches}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-400 border border-purple-500/30 text-xs font-extrabold duration-150 cursor-pointer active:scale-95 outline-none transition-all"
+                            title="شبیه‌سازی تمام بازی‌های کل مرحله گروهی جام"
+                          >
+                            <Sparkles size={14} />
+                            <span>شبیه‌سازی کل ۷۲ بازی</span>
+                          </button>
+
+                          <button
+                            id="reset-btn"
+                            onClick={handleResetMatches}
+                            className="p-2 rounded-xl bg-slate-900 text-slate-400 hover:bg-red-500/20 hover:border-red-500/30 hover:text-red-400 border border-white/5 duration-150 cursor-pointer outline-none transition-all"
+                            title="پاک کردن تمام نتایج و بازنشانی"
+                          >
+                            <RotateCcw size={14} />
+                          </button>
+                        </>
+                      ) : null}
+
+                      <button
+                        id="share-btn"
+                        onClick={handleGenerateShareCode}
+                        className="flex items-center gap-1 px-3 py-2 rounded-xl bg-gradient-to-r from-pink-500 via-purple-600 to-indigo-600 text-white font-bold text-xs duration-150 hover:opacity-95 active:scale-95 cursor-pointer outline-none shadow shadow-purple-500/20 transition-all"
+                      >
+                        <Share2 size={13} />
+                        <span>اشتراک‌گذاری</span>
+                      </button>
+                    </div>
                   </div>
 
-                  <GroupStandings
-                    groupId={selectedGroupFilter}
-                    standings={standingsByGroup[selectedGroupFilter]}
-                  />
+                  {/* Grid content split: matches left, standing dynamic preview right */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                    
+                    {/* Active Group Matches List */}
+                    <div id="active-matches-stack" className="lg:col-span-2 space-y-4">
+                      <div className="flex items-center justify-between" dir="rtl">
+                        <h3 className="text-base font-black text-slate-200 flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 bg-pink-500 rounded-full animate-pulse"></span>
+                          <span>بازی‌های پیش‌بینی گروه {selectedGroupFilter}</span>
+                        </h3>
+                        <span className="text-sm text-slate-400 select-none font-black Persian-font">۶ بازی در کل</span>
+                      </div>
 
-                  {/* Quick helpful information */}
-                  <div className="bg-slate-900/40 p-4 border border-white/5 rounded-2xl flex items-start gap-3">
-                    <span className="text-pink-400 mt-0.5 select-none animate-pulse">💡</span>
-                    <p className="text-xs text-slate-400 Persian-font leading-relaxed">
-                      <strong>راهنما:</strong> با تغییر و ذخیره نتایج بازی‌ها در بخش سمت چپ، امتیازات و تفاضل گل در جدول سمت راست در همان لحظه محاسبه و به‌روزرسانی می‌شوند تا موقعیت ردیف صعود تیم‌ها را ببینید.
-                    </p>
+                      <div id="matches-container" className="space-y-3.5">
+                        {matches
+                          .filter((m) => m.group === selectedGroupFilter)
+                          .map((m) => {
+                            const isFavMatch = favoriteTeam && (m.teamA.id === favoriteTeam || m.teamB.id === favoriteTeam);
+                            const hasNeonGold = activeEffects.gift_ball;
+                            return (
+                              <div
+                                id={`match-row-wrapper-${m.id}`}
+                                key={m.id}
+                                className={`rounded-xl transition-all duration-300 ${
+                                  isFavMatch
+                                    ? "ring-2 ring-purple-500/60 relative shadow-xl shadow-purple-500/10 overflow-hidden"
+                                    : ""
+                                } ${
+                                  hasNeonGold
+                                    ? "bg-amber-500/[0.03] border-2 border-amber-500/40 shadow-[0_0_15px_rgba(234,179,8,0.18)]"
+                                    : ""
+                                }`}
+                              >
+                                {isFavMatch && (
+                                  <div className="absolute top-0 right-0 bg-purple-600 text-white text-[8px] font-black px-2 py-0.5 rounded-bl-lg tracking-wider z-10 uppercase select-none leading-none">
+                                    بازی تیم محبوب شما
+                                  </div>
+                                )}
+                                <MatchRow
+                                  match={m}
+                                  onScoreChange={handleScoreChange}
+                                  onSimulate={handleSimulateMatch}
+                                  displayDay={true}
+                                />
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+
+                    {/* Right side live standing preview widget */}
+                    <div id="group-standings-preview" className="lg:col-span-1 space-y-4" dir="rtl">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 bg-pink-500 rounded-full animate-pulse"></span>
+                        <h3 className="text-base font-black text-slate-200">وضعیت زنده گروه {selectedGroupFilter}</h3>
+                      </div>
+
+                      <GroupStandings
+                        groupId={selectedGroupFilter}
+                        standings={standingsByGroup[selectedGroupFilter]}
+                      />
+
+                      {/* Quick helpful information */}
+                      <div className="bg-slate-900/40 p-4 border border-white/5 rounded-2xl flex items-start gap-3">
+                        <span className="text-pink-400 mt-0.5 select-none animate-pulse">💡</span>
+                        <p className="text-xs text-slate-400 Persian-font leading-relaxed">
+                          <strong>راهنما:</strong> با تغییر و ذخیره نتایج بازی‌ها در بخش سمت چپ، امتیازات و تفاضل گل در جدول سمت راست در همان لحظه محاسبه و به‌روزرسانی می‌شوند تا موقعیت ردیف صعود تیم‌ها را ببینید.
+                        </p>
+                      </div>
+                    </div>
                   </div>
+
                 </div>
-              </div>
+              )}
 
-              {/* Modern Live Soccer News & Tracker Section at Bottom */}
-              <div id="groups-football-news-module" className="mt-8 pt-8 border-t border-white/10 space-y-4">
-                <div className="flex items-center gap-2">
-                  <div className="p-2.5 rounded-xl bg-gradient-to-tr from-emerald-500/20 to-teal-500/20 text-emerald-450 text-emerald-400 border border-emerald-500/10 shadow-lg shadow-emerald-950/20">
-                    <Radio size={18} className="animate-pulse" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm sm:text-base font-black text-slate-200">
-                      بستر رسمی اخبار زنده و ردیاب فوری مسابقات
-                    </h3>
-                    <p className="text-[10px] sm:text-xs text-slate-500 Persian-font">پایش اختصاصی آخرین وقایع فوتبال، رکوردهای برخط و پچ‌های خبری همگام با دیتابیس هوشمند جهانی</p>
-                  </div>
-                </div>
 
-                <SoccerLiveTracker
-                  matches={matches}
-                  onApplyOfficialScores={() => handleToggleLiveMode(true)}
-                  onClearScores={handleResetMatches}
-                  isLiveMode={isLiveMode}
-                  onToggleLiveMode={handleToggleLiveMode}
-                  simulationNotice={simulationNotice}
-                  onTickLive={handleTickLiveMatch}
-                />
-              </div>
             </motion.div>
           )}
 
@@ -1717,6 +1698,7 @@ export default function App() {
                   }));
                   trackUserAction(`ثبت تغییر بازی حذفی ${matchId}`, { ...item });
                 }}
+                matches={matches}
               />
             </motion.div>
           )}
@@ -1793,15 +1775,10 @@ export default function App() {
             >
               <SoccerLiveTracker
                 matches={matches}
-                onApplyOfficialScores={() => handleToggleLiveMode(true)}
-                onClearScores={handleResetMatches}
-                isLiveMode={isLiveMode}
-                onToggleLiveMode={handleToggleLiveMode}
-                simulationNotice={simulationNotice}
-                onTickLive={handleTickLiveMatch}
               />
             </motion.div>
           )}
+
 
           {/* 6. PARTICIPANTS DASHBOARD VIEW */}
           {activeTab === "participants" && (

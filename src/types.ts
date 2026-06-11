@@ -58,3 +58,18 @@ export interface UserPredictionsState {
   favoriteTeam: string | null;
   userName: string;
 }
+
+export interface UserScore {
+  userId: string;
+  totalPoints: number;
+  exactScoresCount: number; // تعداد پیشبینیهای دقیق (برای رتبهبندی)
+  correctOutcomesCount: number; // تعداد تشخیص درست برنده/مساوی
+  level: number;
+  badges: string[];
+  predictionStreak: number; // زنجیره پیشبینیهای درست پشت سر هم
+}
+
+export type BadgeType = 
+  | 'FIRST_KICK' | 'EXACT_MASTER' | 'STREAK_3' 
+  | 'GROUP_WIZARD' | 'KNOCKOUT_NINJA' | 'CHAMPION_PROPHET';
+

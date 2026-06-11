@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from "react";
-import { Team } from "../types";
+import { Team, Match } from "../types";
 import { Plus, Minus, Trophy, Sparkles, Check } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { TeamFlag } from "./TeamFlag";
@@ -20,6 +20,7 @@ interface KnockoutStageProps {
   bestThirds: Team[];
   predictions: Record<string, KnockoutStateItem>;
   onPredictionChange: (matchId: string, item: KnockoutStateItem) => void;
+  matches: Match[];
 }
 
 const STAGES = [
@@ -35,16 +36,31 @@ export const KnockoutStage: React.FC<KnockoutStageProps> = ({
   bestThirds,
   predictions,
   onPredictionChange,
+  matches,
 }) => {
   const [activeStageId, setActiveStageId] = useState<string>("R32");
 
+  // Dynamically compute which groups are officially complete based on real matches on livescore
+  const completedGroups = React.useMemo(() => {
+    const completed: Record<string, boolean> = {};
+    const groupIds = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"];
+    groupIds.forEach((gId) => {
+      const groupMatches = matches.filter((m) => m.group === gId);
+      // Group is completed only if all 6 matches has been officially played (isOfficial === true)
+      const isDone = groupMatches.length === 6 && groupMatches.every((m) => m.isOfficial);
+      completed[gId] = isDone;
+    });
+    return completed;
+  }, [matches]);
+
   // Helper to safely get qualifier by rank
   const getQualifier = (groupId: string, rank: 1 | 2): Team => {
+    const isGroupCompleted = completedGroups[groupId];
     const q = qualifiers[groupId];
-    if (q) {
+    if (isGroupCompleted && q) {
       return rank === 1 ? q.winner : q.runnerUp;
     }
-    // Fallback Mock Team
+    // Fallback Mock Team Placeholder
     return {
       id: `placeholder-${groupId}-${rank}`,
       name: `${rank === 1 ? "صدر" : "تیم دوم"} گروه ${groupId}`,
@@ -55,7 +71,8 @@ export const KnockoutStage: React.FC<KnockoutStageProps> = ({
   };
 
   const getBestThirdQualifier = (rank: number): Team => {
-    if (bestThirds && bestThirds[rank - 1]) {
+    const allGroupsDone = Object.values(completedGroups).every((done) => done);
+    if (allGroupsDone && bestThirds && bestThirds[rank - 1]) {
       return bestThirds[rank - 1];
     }
     return {

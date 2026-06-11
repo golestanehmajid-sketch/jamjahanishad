@@ -186,3 +186,27 @@ export const ACHIEVEMENTS_DATA: { id: string; title: string; description: string
     color: "from-red-500 to-yellow-600"
   }
 ];
+
+export function getGroupIdIndex(groupId: string): number {
+  const groupsOrder = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"];
+  return groupsOrder.indexOf(groupId);
+}
+
+export function getMatchDay(matchId: string): number {
+  const parts = matchId.split("-");
+  if (parts.length < 3 || parts[0] !== "G") return 1;
+  const gId = parts[1];
+  const mIndex = parseInt(parts[2], 10); // 1 to 6
+  
+  const gIdx = getGroupIdIndex(gId);
+  if (gIdx === -1) return 1;
+  const cluster = Math.floor(gIdx / 3); // 4 clusters: ABC(0), DEF(1), GHI(2), JKL(3)
+  
+  let phase = 0;
+  if (mIndex === 1 || mIndex === 2) phase = 0;
+  else if (mIndex === 3 || mIndex === 4) phase = 1;
+  else phase = 2;
+  
+  return (phase * 4) + cluster + 1; // 1 to 12
+}
+

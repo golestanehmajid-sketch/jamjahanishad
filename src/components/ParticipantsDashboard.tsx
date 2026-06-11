@@ -27,10 +27,24 @@ import {
   Unlock,
   CheckCircle2,
   Trash,
-  HelpCircle
+  HelpCircle,
+  Zap,
+  Target,
+  Flame,
+  Award
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { TEAMS } from "../data";
+import { getUserLevel, BADGE_CONFIG, deriveBadgesForScore } from "../utils/scoring";
+
+const badgeIconMap: Record<string, React.ReactNode> = {
+  FIRST_KICK: <Zap size={11} />,
+  EXACT_MASTER: <Target size={11} />,
+  STREAK_3: <Flame size={11} />,
+  GROUP_WIZARD: <Sparkles size={11} />,
+  KNOCKOUT_NINJA: <Award size={11} />,
+  CHAMPION_PROPHET: <Crown size={11} />,
+};
 
 export interface Participant {
   id: string;
@@ -943,6 +957,7 @@ export const ParticipantsDashboard: React.FC = () => {
                 <tr className="bg-slate-950/50 text-slate-400 text-xs font-black border-b border-white/10 backdrop-blur-md">
                   <th className="p-4 text-center w-14">رتبه</th>
                   <th className="p-4">نام و مشخصات شرکت‌کننده</th>
+                  <th className="p-4">لول و نشان‌های افتخار</th>
                   <th className="p-4">تیم محبوب</th>
                   <th className="p-4">قهرمان پیش‌بینی شده</th>
                   <th className="p-4 text-center">تعداد پیش‌بینی</th>
@@ -990,11 +1005,37 @@ export const ParticipantsDashboard: React.FC = () => {
                               {p.name}
                               {index === 0 && <Crown size={12} className="text-amber-400 fill-amber-400 animate-bounce" />}
                             </span>
-                            <span className="text-[10px] text-slate-500 font-bold font-mono tracking-wider flex items-center gap-1 mt-0.5">
-                              <Calendar size={10} className="text-slate-600" />
-                              {p.registeredAt || "۱۴۰۵/۰۳/۱۵"}
-                            </span>
+                            <div className="flex flex-col gap-1 mt-0.5">
+                              <span className="text-[10px] text-slate-500 font-bold font-mono tracking-wider flex items-center gap-1">
+                                <Calendar size={10} className="text-slate-600" />
+                                {p.registeredAt || "۱۴۰۵/۰۳/۱۵"}
+                              </span>
+                              <span className="inline-flex self-start text-[9px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded font-black max-w-max">
+                                {getUserLevel(p.predScore).title}
+                              </span>
+                            </div>
                           </div>
+                        </div>
+                      </td>
+
+                      {/* Achievements Badges */}
+                      <td className="p-4">
+                        <div className="flex flex-wrap gap-1.5 items-center">
+                          {deriveBadgesForScore(p.predScore, p.predictionsCount || 48).map((badgeKey) => {
+                            const config = BADGE_CONFIG[badgeKey as keyof typeof BADGE_CONFIG];
+                            if (!config) return null;
+                            const icon = badgeIconMap[badgeKey] || <Zap size={11} />;
+                            return (
+                              <span 
+                                key={badgeKey}
+                                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg border text-[10px] font-black cursor-help transform hover:scale-105 duration-100 transition-all ${config.color}`}
+                                title={`${config.label}: ${config.desc}`}
+                              >
+                                {icon}
+                                <span>{config.label}</span>
+                              </span>
+                            );
+                          })}
                         </div>
                       </td>
 
