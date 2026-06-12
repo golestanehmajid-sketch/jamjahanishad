@@ -219,11 +219,7 @@ export default function App() {
             localStorage.setItem("wc_predictor_shad_hash", participantId);
 
             setTimeout(() => {
-              showNotice(
-                fullname
-                  ? `🟢 خوش آمدی ${fullname}! حضور شما در سامانه ثبت شد 🎓`
-                  : "🟢 حضور شما در سامانه ثبت شد 🎓"
-              );
+              showNotice("🟢 حضور شما در سامانه ثبت شد 🎓");
             }, 1200);
           } else {
             setShadError(res.error || "شناسه معتبری در شاد یافت نشد.");

@@ -1,5 +1,5 @@
 {
-  "name": "پیش بینی جام جهانی 2026",
+  "name": "جام جهانی بوقچی ایران شاد",
   "description": "نرم‌افزار تعاملی پیش‌بینی مسابقات جام جهانی مخصوص نوجوانان با جدول رده‌بندی گروهی پویا و ثبت امتیازات",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

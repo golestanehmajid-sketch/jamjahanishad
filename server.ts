@@ -49,8 +49,8 @@ app.get("/api/shad/user-info", async (req, res) => {
 
   // Helper inside loop/handler to create responsive fallback objects
   const getFallbackStudent = (uId: string) => {
-    let namePart = "دانش‌آموز";
-    let familyPart = "شاد " + uId.substring(0, 5);
+    let namePart = "کاربر";
+    let familyPart = "شاد";
     
     if (decodedQueryName) {
       const parts = decodedQueryName.split(/\s+/);
