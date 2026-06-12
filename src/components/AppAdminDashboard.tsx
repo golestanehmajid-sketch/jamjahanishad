@@ -25,7 +25,9 @@ import {
   Trash2,
   Eye,
   RefreshCw,
-  Terminal
+  Terminal,
+  Download,
+  FileSpreadsheet
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -47,6 +49,7 @@ interface ActionLog {
   username: string;
   action: string;
   timestamp: string;
+  exactTime?: string;
   details?: string;
 }
 
@@ -219,6 +222,21 @@ export const AppAdminDashboard: React.FC = () => {
       } catch (err) {
         alert("خطا در انتشار گروهی تایید صلاحیت‌ها");
       }
+    }
+  };
+
+  // Download all user predictions as a CSV spreadsheet
+  const downloadPredictionsCsv = () => {
+    try {
+      const link = document.createElement("a");
+      link.href = "/api/admin/predictions-csv";
+      link.setAttribute("download", "all_user_predictions.csv");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error("Error setting up download link:", err);
+      window.location.href = "/api/admin/predictions-csv";
     }
   };
 
@@ -651,16 +669,27 @@ export const AppAdminDashboard: React.FC = () => {
               <div className="space-y-6">
                 
                 {/* Visual Intro statement */}
-                <div className="flex items-center gap-3 bg-gradient-to-r from-amber-500/10 to-indigo-500/10 border border-white/5 p-4 rounded-2xl">
-                  <div className="p-2.5 rounded-xl bg-amber-500/15 text-amber-400 font-bold">
-                    <Sparkles size={18} className="animate-spin-slow" />
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-amber-500/10 to-indigo-500/10 border border-white/5 p-4 rounded-2xl">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-xl bg-amber-500/15 text-amber-400 font-bold shrink-0">
+                      <Sparkles size={18} className="animate-spin-slow" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-slate-100">تحلیل هوشمند رفتار و سلیقه کارشناسی پیش‌بینی‌گران</h4>
+                      <p className="text-slate-400 text-[10px] sm:text-xs leading-relaxed">
+                        این داشبورد داده‌های همزمان را پردازش کرده و تراکم نتایج، محبوبیت فلگ‌ها و سلیقه قهرمانی کاربران را مانیتور می‌کند.
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-xs font-black text-slate-100">تحلیل هوشمند رفتار و سلیقه کارشناسی پیش‌بینی‌گران</h4>
-                    <p className="text-slate-400 text-[10px] sm:text-xs leading-relaxed">
-                      این داشبورد داده‌های همزمان را پردازش کرده و تراکم نتایج، محبوبیت فلگ‌ها و سلیقه قهرمانی کاربران را مانیتور می‌کند.
-                    </p>
-                  </div>
+
+                  <button
+                    type="button"
+                    onClick={downloadPredictionsCsv}
+                    className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-black text-xs duration-150 cursor-pointer shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-2 border border-emerald-400/20 shrink-0 Persian-font transition-all active:scale-[0.97]"
+                  >
+                    <FileSpreadsheet size={15} className="animate-pulse" />
+                    <span>خروجی اکسل (CSV) پیش‌بینی‌ها</span>
+                  </button>
                 </div>
 
                 {/* Score Dist & Top Predictors section */}
@@ -908,10 +937,19 @@ export const AppAdminDashboard: React.FC = () => {
                     </p>
                   </div>
 
-                  <div>
+                  <div className="flex items-center gap-2 flex-wrap">
                     <button
+                      type="button"
+                      onClick={downloadPredictionsCsv}
+                      className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-emerald-400 font-extrabold text-xs duration-150 cursor-pointer border border-emerald-500/20 shadow flex items-center gap-1.5 transition-all active:scale-95"
+                    >
+                      <FileSpreadsheet size={13} />
+                      <span>دانلود اکسل پیش‌بینی‌ها</span>
+                    </button>
+                    <button
+                      type="button"
                       onClick={approveAllPending}
-                      className="px-4 py-2 rounded-xl bg-pink-500 hover:bg-pink-600 text-white font-black text-xs duration-150 cursor-pointer shadow-lg shadow-pink-500/10 flex items-center gap-1"
+                      className="px-4 py-2 rounded-xl bg-pink-500 hover:bg-pink-600 text-white font-black text-xs duration-150 cursor-pointer shadow-lg shadow-pink-500/10 flex items-center gap-1 active:scale-95 transition-all"
                     >
                       <Check size={12} />
                       <span>انتشار سراسری همه معلق‌ها</span>
@@ -1123,51 +1161,59 @@ export const AppAdminDashboard: React.FC = () => {
                           }
                         };
                         const { tStr, relative } = getTimestampDisplay(log.timestamp);
+                        const displayTime = log.exactTime || tStr;
                         
-                        // Action styling helper
+                        // Action styling helper with extremely high-contrast and readable colours
                         const getBadgeStyle = (txt: string) => {
-                          if (txt.includes("پیش‌بینی") || txt.includes("حذفی")) {
-                            return "text-amber-350 bg-amber-500/10 border-amber-500/20";
+                          const actionLower = txt.toLowerCase();
+                          if (actionLower.includes("پیش‌بینی") || actionLower.includes("حذفی") || actionLower.includes("قهرمان")) {
+                            return "text-amber-400 bg-amber-500/15 border-amber-500/35 font-extrabold";
                           }
-                          if (txt.includes("تیم محبوب") || txt.includes("نام کاربری")) {
-                            return "text-sky-300 bg-sky-500/10 border-sky-500/20";
+                          if (actionLower.includes("تیم محبوب") || actionLower.includes("نام کاربری") || actionLower.includes("مشخصات") || actionLower.includes("پروفایل")) {
+                            return "text-cyan-300 bg-cyan-500/15 border-cyan-500/35 font-extrabold";
                           }
-                          if (txt.includes("مشاهده بخش")) {
-                            return "text-indigo-300 bg-indigo-500/10 border-indigo-500/20";
+                          if (actionLower.includes("مشاهده بخش") || actionLower.includes("کلیک روی میانبر")) {
+                            return "text-purple-400 bg-purple-500/15 border-purple-500/35 font-extrabold";
                           }
-                          if (txt.includes("طبل") || txt.includes("شیپور")) {
-                            return "text-green-300 bg-green-500/10 border-green-500/20";
+                          if (actionLower.includes("طبل") || actionLower.includes("شیپور") || actionLower.includes("شعار") || actionLower.includes("کلوپ")) {
+                            return "text-emerald-400 bg-emerald-500/15 border-emerald-500/35 font-extrabold";
                           }
-                          return "text-slate-300 bg-slate-850 border-white/5";
+                          if (actionLower.includes("شبیه‌سازی")) {
+                            return "text-sky-400 bg-sky-500/15 border-sky-500/35 font-extrabold";
+                          }
+                          if (actionLower.includes("پاکسازی") || actionLower.includes("حذف") || actionLower.includes("غیرفعال")) {
+                            return "text-rose-400 bg-rose-500/15 border-rose-500/35 font-extrabold";
+                          }
+                          return "text-slate-200 bg-slate-800/40 border-slate-700/30 font-bold";
                         };
 
                         return (
                           <div 
                             key={log.id}
-                            className="p-3 rounded-2xl bg-slate-950/40 border border-white/5 hover:bg-slate-950/70 transition-all text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-right"
+                            className="p-3.5 rounded-2xl bg-slate-900/95 border border-slate-850 hover:border-slate-700/50 hover:bg-slate-950/90 transition-all text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-right"
                           >
                             <div className="flex items-start gap-2.5 min-w-0">
                               <span className="text-base select-none mt-0.5" role="img">⚡</span>
                               <div className="min-w-0 space-y-1">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="text-[10px] font-black text-indigo-300 bg-indigo-400/10 px-2 py-0.5 rounded border border-indigo-500/10 shrink-0">
+                                  <span className="text-[10px] font-black text-indigo-300 bg-indigo-500/15 px-2 py-0.5 rounded border border-indigo-500/30 shrink-0">
                                     {log.username || "مهمان بی‌نام"}
                                   </span>
-                                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded border ${getBadgeStyle(log.action)}`}>
+                                  <span className={`text-[11px] px-2 py-0.5 rounded border ${getBadgeStyle(log.action)}`}>
                                     {log.action}
                                   </span>
                                 </div>
                                 {log.details && (
-                                  <div className="text-[10px] text-slate-450 font-mono bg-slate-950/80 px-2 py-1 rounded border border-white/5 break-all inline-block max-w-full">
+                                  <div className="text-[10px] text-slate-300 font-mono bg-slate-950/80 px-2.5 py-1 rounded border border-white/5 break-all inline-block max-w-full">
                                     {typeof log.details === "object" ? JSON.stringify(log.details) : String(log.details)}
                                   </div>
                                 )}
                               </div>
                             </div>
 
-                            <div className="flex sm:flex-col items-end shrink-0 justify-between sm:justify-center text-slate-500 text-[10px] font-bold">
-                              <span className="text-indigo-400 font-mono" dir="ltr">{tStr}</span>
-                              <span className="text-slate-450 font-sans mt-0.5">{relative}</span>
+                            <div className="flex sm:flex-col items-end shrink-0 justify-between sm:justify-center text-slate-400 text-[10px] font-bold">
+                              <span className="text-pink-400 font-mono text-[11px] font-black" dir="ltr">⏱️ {displayTime}</span>
+                              <span className="text-slate-450 font-sans mt-0.5 text-[9px]">{relative}</span>
                             </div>
 
                           </div>

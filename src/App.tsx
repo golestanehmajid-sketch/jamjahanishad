@@ -261,10 +261,45 @@ export default function App() {
   const [isSubmittingToDB, setIsSubmittingToDB] = useState<boolean>(false);
   const [isAdminMode, setIsAdminMode] = useState<boolean>(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.has("admin") || params.has("panel") || params.get("mode") === "admin";
+    const path = window.location.pathname.toLowerCase();
+    const hash = window.location.hash.toLowerCase();
+    return params.has("admin") || params.has("panel") || params.get("mode") === "admin" ||
+           path.includes("/admin") || path.includes("/panel") ||
+           hash.includes("admin") || hash.includes("panel");
   });
 
-  const [activeTab, setActiveTab] = useState<"groups" | "standings" | "knockout" | "achievements" | "sportsNews" | "participants" | "adminDashboard" | "rules">("groups");
+  const [activeTab, setActiveTab] = useState<"groups" | "standings" | "knockout" | "achievements" | "sportsNews" | "participants" | "adminDashboard" | "rules">(() => {
+    const params = new URLSearchParams(window.location.search);
+    const path = window.location.pathname.toLowerCase();
+    const hash = window.location.hash.toLowerCase();
+    const isAdmin = params.has("admin") || params.has("panel") || params.get("mode") === "admin" ||
+                    path.includes("/admin") || path.includes("/panel") ||
+                    hash.includes("admin") || hash.includes("panel");
+    return isAdmin ? "adminDashboard" : "groups";
+  });
+
+  // Keep adminMode and activeTab in sync with browser address bar changes
+  useEffect(() => {
+    const syncRouteChanges = () => {
+      const params = new URLSearchParams(window.location.search);
+      const path = window.location.pathname.toLowerCase();
+      const hash = window.location.hash.toLowerCase();
+      const isAdmin = params.has("admin") || params.has("panel") || params.get("mode") === "admin" ||
+                      path.includes("/admin") || path.includes("/panel") ||
+                      hash.includes("admin") || hash.includes("panel");
+      if (isAdmin) {
+        setIsAdminMode(true);
+        setActiveTab("adminDashboard");
+      }
+    };
+    window.addEventListener("popstate", syncRouteChanges);
+    window.addEventListener("hashchange", syncRouteChanges);
+    return () => {
+      window.removeEventListener("popstate", syncRouteChanges);
+      window.removeEventListener("hashchange", syncRouteChanges);
+    };
+  }, []);
+
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [selectedGroupFilter, setSelectedGroupFilter] = useState<string>("A");
   const [matchViewMode, setMatchViewMode] = useState<"daily" | "groups">("daily");

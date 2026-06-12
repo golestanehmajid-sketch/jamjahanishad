@@ -23,6 +23,7 @@ import {
   dbClearActionLogs,
   dbSaveUserPredictions,
   dbGetUserPredictions,
+  dbGetAllPredictions,
 } from "./src/db";
 import { getShadAccessToken, fetchShadUserEvent } from "./src/shad-api";
 
@@ -675,15 +676,38 @@ app.get("/api/action-logs", async (req, res) => {
 
 app.post("/api/action-logs", async (req, res) => {
   try {
-    const { username, action, details } = req.body;
+    const { username, action, details, exactTime } = req.body;
     if (!username || !action) {
       return res.status(400).json({ error: "Username and action fields are required." });
     }
+
+    // Capture precise time (HH:MM:SS) - default to Tehran time on server if missing from client
+    let finalExactTime = exactTime;
+    if (!finalExactTime) {
+      const d = new Date();
+      try {
+        const formatter = new Intl.DateTimeFormat("en-US", {
+          timeZone: "Asia/Tehran",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false
+        });
+        finalExactTime = formatter.format(d);
+      } catch (e) {
+        const h = String(d.getUTCHours()).padStart(2, "0");
+        const m = String(d.getUTCMinutes()).padStart(2, "0");
+        const s = String(d.getUTCSeconds()).padStart(2, "0");
+        finalExactTime = `${h}:${m}:${s}`;
+      }
+    }
+
     const log = {
       id: "log-" + Date.now() + "-" + Math.random().toString(36).substr(2, 5),
       username,
       action,
       timestamp: new Date().toISOString(),
+      exactTime: finalExactTime,
       details: details ? (typeof details === 'object' ? JSON.stringify(details) : String(details)) : undefined,
     };
     const saved = await dbSaveActionLog(log);
@@ -697,6 +721,109 @@ app.delete("/api/action-logs", async (req, res) => {
   try {
     await dbClearActionLogs();
     res.json({ success: true, message: "کلیه گزارش‌های فعالیت کاربران با موفقیت پاکسازی شد." });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/admin/predictions-csv", async (req, res) => {
+  try {
+    const participants = await dbGetParticipants();
+    const predictions = await dbGetAllPredictions();
+
+    // Map predictions by participantId for easy lookup
+    const predictionsMap: Record<string, any[]> = {};
+    for (const pred of predictions) {
+      if (!predictionsMap[pred.participantId]) {
+        predictionsMap[pred.participantId] = [];
+      }
+      predictionsMap[pred.participantId].push(pred);
+    }
+
+    // Prepare CSV header with Persian translations
+    const headerCols = [
+      "شناسه کاربر",
+      "نام و نام خانوادگی",
+      "استان",
+      "منطقه",
+      "مقطع تحصیلی",
+      "نقش کاربری",
+      "شماره تماس/ایمیل",
+      "تیم محبوب",
+      "قهرمان پیش‌بینی شده",
+      "امتیاز کل",
+      "تعداد پیش‌بینی‌ها",
+      "شناسه مسابقه",
+      "گل تیم اول",
+      "گل تیم دوم",
+      "برنده انتخاب شده"
+    ];
+
+    const escapeCsvValue = (val: any) => {
+      if (val === null || val === undefined) return "";
+      const str = String(val).replace(/"/g, '""');
+      if (str.includes(",") || str.includes("\n") || str.includes('"')) {
+        return `"${str}"`;
+      }
+      return str;
+    };
+
+    let csvContent = headerCols.map(escapeCsvValue).join(",") + "\n";
+
+    for (const p of participants) {
+      const userPreds = predictionsMap[p.id] || [];
+      if (userPreds.length === 0) {
+        // Output one row with empty prediction fields so the participant is still represented
+        const row = [
+          p.id,
+          p.name,
+          p.provinceName || "",
+          p.districtName || "",
+          p.courseStudy || "",
+          p.shadRole || "",
+          p.phoneOrEmail || "",
+          p.favoriteTeam || "",
+          p.predictedChampion || "",
+          p.predScore,
+          p.predictionsCount,
+          "", // match_id
+          "", // scoreA
+          "", // scoreB
+          ""  // winnerId
+        ];
+        csvContent += row.map(escapeCsvValue).join(",") + "\n";
+      } else {
+        for (const pred of userPreds) {
+          const row = [
+            p.id,
+            p.name,
+            p.provinceName || "",
+            p.districtName || "",
+            p.courseStudy || "",
+            p.shadRole || "",
+            p.phoneOrEmail || "",
+            p.favoriteTeam || "",
+            p.predictedChampion || "",
+            p.predScore,
+            p.predictionsCount,
+            pred.matchId,
+            pred.scoreA ?? "",
+            pred.scoreB ?? "",
+            pred.winnerId || ""
+          ];
+          csvContent += row.map(escapeCsvValue).join(",") + "\n";
+        }
+      }
+    }
+
+    // Set headers with UTF-8 support
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", "attachment; filename=all_user_predictions.csv");
+    
+    // Add UTF-8 BOM to prevent Persian letter corruption in Excel
+    res.write(Buffer.from("\uFEFF", "utf-8"));
+    res.write(Buffer.from(csvContent, "utf-8"));
+    res.end();
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -1321,6 +1448,22 @@ async function startServer() {
       appType: "spa",
     });
     app.use(vite.middlewares);
+
+    // Add a fallback for SPA routing in development so paths like /admin or /panel serve index.html
+    app.get("*", async (req, res, next) => {
+      // Exclude API routes and files with extensions
+      if (req.originalUrl.startsWith("/api") || req.originalUrl.includes(".")) {
+        return next();
+      }
+      try {
+        const htmlPath = path.join(process.cwd(), "index.html");
+        let html = fs.readFileSync(htmlPath, "utf-8");
+        html = await vite.transformIndexHtml(req.originalUrl, html);
+        res.status(200).set({ "Content-Type": "text/html" }).end(html);
+      } catch (err) {
+        next(err);
+      }
+    });
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));

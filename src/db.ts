@@ -175,6 +175,7 @@ export interface ActionLog {
   username: string;
   action: string;
   timestamp: string;
+  exactTime?: string;
   details?: string;
 }
 
@@ -189,6 +190,11 @@ async function migrateActionLogsTable() {
       details TEXT
     )
   `);
+  try {
+    await pool.query(`ALTER TABLE action_logs ADD COLUMN IF NOT EXISTS exact_time VARCHAR(100)`);
+  } catch (err) {
+    console.error("Error migrating exact_time for action_logs:", err);
+  }
 }
 
 async function migratePredictionsTable() {
@@ -515,12 +521,13 @@ export async function dbGetActionLogs(): Promise<ActionLog[]> {
   await initDb();
   if (pool) {
     try {
-      const res = await pool.query("SELECT id, username, action, timestamp, details FROM action_logs ORDER BY timestamp DESC, id DESC LIMIT 500");
+      const res = await pool.query("SELECT id, username, action, timestamp, exact_time, details FROM action_logs ORDER BY timestamp DESC, id DESC");
       return res.rows.map(row => ({
         id: row.id,
         username: row.username,
         action: row.action,
         timestamp: row.timestamp,
+        exactTime: row.exact_time ?? undefined,
         details: row.details ?? undefined
       }));
     } catch (err) {
@@ -546,8 +553,8 @@ export async function dbSaveActionLog(log: ActionLog): Promise<ActionLog> {
   if (pool) {
     try {
       await pool.query(
-        "INSERT INTO action_logs (id, username, action, timestamp, details) VALUES ($1, $2, $3, $4, $5)",
-        [log.id, log.username, log.action, log.timestamp, log.details ?? null]
+        "INSERT INTO action_logs (id, username, action, timestamp, exact_time, details) VALUES ($1, $2, $3, $4, $5, $6)",
+        [log.id, log.username, log.action, log.timestamp, log.exactTime ?? null, log.details ?? null]
       );
       return log;
     } catch (err) {
@@ -668,3 +675,44 @@ export async function dbGetUserPredictions(participantId: string): Promise<any[]
 
   return [];
 }
+
+export async function dbGetAllPredictions(): Promise<any[]> {
+  await initDb();
+  if (pool) {
+    try {
+      const res = await pool.query(
+        "SELECT participant_id as \"participantId\", match_id as \"matchId\", score_a as \"scoreA\", score_b as \"scoreB\", winner_id as \"winnerId\" FROM predictions"
+      );
+      return res.rows;
+    } catch (err) {
+      console.error("Error reading all predictions from PostgreSQL, falling back to files:", err);
+    }
+  }
+
+  try {
+    if (fs.existsSync(PREDICTIONS_FILE)) {
+      const content = fs.readFileSync(PREDICTIONS_FILE, "utf-8");
+      const dataMap = JSON.parse(content);
+      const all: any[] = [];
+      for (const [partId, preds] of Object.entries(dataMap)) {
+        if (Array.isArray(preds)) {
+          preds.forEach((p: any) => {
+            all.push({
+              participantId: partId,
+              matchId: p.matchId,
+              scoreA: p.scoreA,
+              scoreB: p.scoreB,
+              winnerId: p.winnerId
+            });
+          });
+        }
+      }
+      return all;
+    }
+  } catch (err) {
+    console.error("Error parsing all local predictions:", err);
+  }
+
+  return [];
+}
+
