@@ -21,6 +21,8 @@ import {
   dbGetActionLogs,
   dbSaveActionLog,
   dbClearActionLogs,
+  dbSaveUserPredictions,
+  dbGetUserPredictions,
 } from "./src/db";
 import { getShadAccessToken, fetchShadUserEvent } from "./src/shad-api";
 

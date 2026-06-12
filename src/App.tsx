@@ -50,7 +50,9 @@ import {
   Smartphone,
   Watch,
   Headphones,
-  Wifi
+  Wifi,
+  Menu,
+  MoreHorizontal
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -263,6 +265,7 @@ export default function App() {
   });
 
   const [activeTab, setActiveTab] = useState<"groups" | "standings" | "knockout" | "achievements" | "sportsNews" | "participants" | "adminDashboard" | "rules">("groups");
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [selectedGroupFilter, setSelectedGroupFilter] = useState<string>("A");
   const [matchViewMode, setMatchViewMode] = useState<"daily" | "groups">("daily");
   const [selectedDay, setSelectedDay] = useState<number>(1);
@@ -1102,41 +1105,25 @@ export default function App() {
                   <span>هدفون بی‌سیم مدرن</span>
                 </div>
                 <div className="flex items-center gap-1.5 text-xs font-bold leading-normal px-3.5 py-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 Persian-font shadow-inner">
-                  <Wifi size={14} className="shrink-0" />
-                  <span>اینترنت پرسرعت همراه و جوایز نقدی پویا</span>
+                  <Flame size={14} className="shrink-0 animate-pulse text-emerald-400" />
+                  <span>بسته‌های اینترنتی رایگان</span>
                 </div>
               </div>
 
-              {/* Quick interactive note */}
-              <p className="text-[11px] text-slate-400 select-none font-bold Persian-font flex items-center gap-1.5 mt-1 sm:mt-2">
-                <Sparkles size={12} className="text-pink-400 animate-spin" />
-                رایگان، بدون قرعه‌کشی برای رده‌های ممتاز جدول + قرعه‌کشی روزانه برای همه شرکت‌کنندگان
+              {/* Explanatory subtitle */}
+              <p className="text-xs text-slate-400 leading-relaxed text-center lg:text-right max-w-lg mt-2 Persian-font">
+                با هر پیش‌بینی صحیح مسابقات جام جهانی دانش‌آموزی، امتیاز کسب کنید. در پایان، برندگان رتبه‌های اول تا سوم جوایز فوق‌العاده‌ای مثل گوشی هوشمند، ساعت و هدفون دیجیتال دریافت می‌کنند!
               </p>
             </div>
-            
-            {/* Left side: Premium 3D Interactive Mock Smartphone & Floating Trophy */}
-            <div className="shrink-0 flex items-center justify-center w-full lg:w-auto relative px-4 select-none mt-4 lg:mt-0">
-              <div className="relative w-44 h-56 flex items-center justify-center">
+
+            {/* Left side: Golden Trophy Showcase Model */}
+            <div className="flex-shrink-0 relative flex items-center justify-center p-4">
+              <div className="relative w-40 h-40 flex items-center justify-center">
+                {/* Floating animations using Framer Motion */}
+                {/* Real-time rotating glow rings behind trophy */}
+                <div className="absolute inset-0 rounded-full bg-indigo-500/10 animate-ping duration-3000 pointer-events-none" />
+                <div className="absolute w-28 h-28 rounded-full border border-yellow-500/10 animate-spin duration-10000 pointer-events-none" />
                 
-                {/* Ambient glow behind the phone mockup */}
-                <div className="absolute inset-0 bg-indigo-500/20 blur-3xl rounded-full scale-110 pointer-events-none animate-pulse" />
-
-                {/* Sparkling Background Nodes */}
-                <motion.div
-                  animate={{ rotate: 360, scale: [0.9, 1.1, 0.9] }}
-                  transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
-                  className="absolute text-yellow-300 opacity-70 pointer-events-none top-2 left-2"
-                >
-                  <Sparkles size={18} />
-                </motion.div>
-                <motion.div
-                  animate={{ rotate: -360, scale: [1, 0.85, 1] }}
-                  transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
-                  className="absolute text-pink-400 opacity-60 pointer-events-none bottom-4 right-0"
-                >
-                  <Sparkles size={14} />
-                </motion.div>
-
                 {/* 3D-angled Glassmorphic Smartphone Model */}
                 <motion.div
                   animate={{ 
@@ -1193,7 +1180,7 @@ export default function App() {
                     </motion.div>
 
                     {/* Miniature live-rank card */}
-                    <span className="text-[8px] font-black tracking-tight text-yellow-300 bg-yellow-500/10 px-2 py-0.5 rounded-full border border-yellow-500/20 uppercase mt-2 Persian-font scale-90">
+                    <span className="text-[8px] font-black tracking-tight text-yellow-300 bg-yellow-500/10 px-2.5 py-0.5 rounded-full border border-yellow-500/20 uppercase mt-2 Persian-font scale-90">
                       رتبه ۱ تا ۳ لیدربورد 🏆
                     </span>
                   </div>
@@ -1253,15 +1240,15 @@ export default function App() {
                 </div>
               )}
               
-              <div className="text-right flex-1">
+              <div className="text-right flex-1 select-none">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[10.5px] font-black text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-md border border-emerald-500/20">
-                    همگام‌سازی شبکه آموزش دانش‌آموزی (شاد)
+                    ورود تایید شده از طریق شبکه شاد
                   </span>
                   {shadProfile && (
                     <span className="text-[9px] bg-slate-950/80 border border-white/5 text-slate-350 px-2.5 py-0.5 rounded-full font-mono font-bold">
                        کد احراز: {shadProfile.id}
-                    </span>
+                     </span>
                   )}
                 </div>
 
@@ -1273,11 +1260,11 @@ export default function App() {
                   <div className="mt-1 flex flex-wrap items-center gap-y-1 gap-x-3 text-slate-300 font-bold text-[10.5px] sm:text-xs">
                     <span>خوش آمدید، <strong className="text-white text-xs font-black">{shadProfile.name} {shadProfile.family}</strong></span>
                     <span className="text-slate-600">|</span>
-                    <span>مقطع: <strong className="text-emerald-300">{shadProfile.courseStudy || "نامشخص"}</strong></span>
+                    <span>تایید شاد: <strong className="text-emerald-300">موفقیت‌آمیز</strong></span>
                     <span className="text-slate-600">|</span>
-                    <span>محل تحصیل: <strong className="text-emerald-300">{shadProfile.provinceName} ({shadProfile.districtName || "منطقه ۱"})</strong></span>
+                    <span>محل سکونت: <strong className="text-emerald-300">{shadProfile.provinceName}</strong></span>
                     <span className="text-slate-600">|</span>
-                    <span>نقش: <strong className="text-teal-300">دانش‌آموز فعال</strong></span>
+                    <span>وضعیت کاربری: <strong className="text-teal-300">کاربر تایید شده شاد</strong></span>
                   </div>
                 ) : (
                   <p className="text-xs text-slate-400 mt-1">شناسه کاربری شما دریافت شد اما اطلاعات تکمیلی هنوز استعلام نشده است.</p>
@@ -2615,30 +2602,35 @@ export default function App() {
         </motion.button>
       </div>
 
-      {/* ----------------- MOBILE BOTTOM NAV BAR ----------------- */}
+      {/* ----------------- MOBILE BOTTOM NAV BAR & MORE PANEL ----------------- */}
       <nav id="mobile-navigation-tabs" className="sm:hidden fixed bottom-0 left-0 right-0 bg-slate-950/90 backdrop-blur-2xl border-t border-white/10 px-1 py-1 z-40 shadow-2xl flex items-center justify-around h-16 w-full animate-fade-in" dir="rtl">
         {[
-          { id: "groups", label: "مسابقات", icon: Calendar },
+          { id: "groups", label: "بازی‌ها", icon: Calendar },
           { id: "standings", label: "جدول‌ها", icon: Award },
           { id: "knockout", label: "حذفی", icon: Trophy },
-          { id: "achievements", label: "نشان‌ها", icon: Sparkles },
-          { id: "sportsNews", label: "پخش زنده", icon: Radio },
-          { id: "rules", label: "جوایز", icon: Gift },
           { id: "participants", label: "کاربران", icon: Users },
-          ...(isAdminMode ? [{ id: "adminDashboard", label: "مدیریت", icon: ShieldCheck }] : [])
+          { id: "more", label: "بیشتر", icon: Menu }
         ].map((tab) => {
           const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
+          // The more button is active if the active tab is one of the secondary pages (not the main 4)
+          const isSecondaryActive = ["achievements", "sportsNews", "rules", "adminDashboard"].includes(activeTab);
+          const isActive = tab.id === "more" ? isSecondaryActive : activeTab === tab.id;
 
           return (
             <button
               id={`mobile-tab-btn-${tab.id}`}
               key={tab.id}
               onClick={() => {
-                setActiveTab(tab.id as any);
-                const element = document.getElementById("primary-view-container") || document.getElementById("navigation-tabs");
-                if (element) {
-                  element.scrollIntoView({ behavior: "smooth", block: "start" });
+                if (tab.id === "more") {
+                  setIsMobileMenuOpen(true);
+                  trackUserAction("کلیک روی دکمه بیشتر در منوی موبایل");
+                } else {
+                  setActiveTab(tab.id as any);
+                  setIsMobileMenuOpen(false);
+                  const element = document.getElementById("primary-view-container") || document.getElementById("navigation-tabs");
+                  if (element) {
+                    element.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }
                 }
               }}
               className={`flex-1 flex flex-col items-center justify-center gap-1 py-1 px-0.5 h-full font-bold duration-150 cursor-pointer outline-none relative transition-all ${
@@ -2646,9 +2638,9 @@ export default function App() {
               }`}
             >
               <div className="relative flex items-center justify-center">
-                <Icon size={18} className={isActive ? "text-pink-400 scale-110" : "text-slate-400"} />
-                {tab.id === "achievements" && stats.unlockedCount > 0 && (
-                  <span className="absolute -top-1.5 -right-2 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-gradient-to-tr from-yellow-400 to-amber-500 text-[8px] font-black text-slate-950 animate-pulse">
+                <Icon size={18} className={isActive ? "text-pink-400 scale-110 animate-pulse" : "text-slate-400"} />
+                {tab.id === "more" && stats.unlockedCount > 0 && (
+                  <span className="absolute -top-1.5 -right-2 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-gradient-to-tr from-yellow-400 to-amber-500 text-[8px] font-black text-slate-950">
                     {stats.unlockedCount}
                   </span>
                 )}
@@ -2665,6 +2657,94 @@ export default function App() {
           );
         })}
       </nav>
+
+      {/* 🔮 BEAUTIFUL MOBILE SLIDING MORE TRAY */}
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center sm:hidden">
+            {/* Dark glass overlay */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm"
+            />
+
+            {/* Custom bottom sheet tray */}
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 220 }}
+              className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-slate-950 border-t border-purple-500/20 rounded-t-[2rem] p-6 shadow-2xl z-50 flex flex-col gap-4 text-right"
+              dir="rtl"
+            >
+              {/* Grab handle */}
+              <div className="w-12 h-1 bg-slate-800 rounded-full mx-auto mb-2 shrink-0" />
+
+              <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                <div className="text-right">
+                  <h3 className="text-sm font-black text-slate-200 Persian-font">سایر بخش‌ها و امکانات</h3>
+                  <p className="text-[10px] text-slate-400 mt-0.5 Persian-font">بخش پشتیبانی و تنظیمات کاربری مسابقه</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="w-8 h-8 rounded-full bg-slate-900 border border-white/5 flex items-center justify-center text-slate-400 hover:text-white cursor-pointer active:scale-95"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
+              {/* Grid of options */}
+              <div className="grid grid-cols-2 gap-3 py-2">
+                {[
+                  { id: "achievements", label: "نشان‌ها و دستاوردها", desc: "جوایز و مدال‌های کسب شده", icon: Sparkles, color: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
+                  { id: "sportsNews", label: "اخبار و پخش زنده", desc: "ویدیوها و خبرهای جام", icon: Radio, color: "text-red-400 bg-red-500/10 border-red-500/20" },
+                  { id: "rules", label: "قوانین و جوایز مسابقه", desc: "راهنمای کامل ثبت پیش‌بینی", icon: Gift, color: "text-purple-400 bg-purple-500/10 border-purple-500/20" },
+                  ...(isAdminMode ? [{ id: "adminDashboard", label: "پنل مدیریت سیستم", desc: "دسترسی بوقچی ارشد", icon: ShieldCheck, color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" }] : [])
+                ].map((item) => {
+                  const Icon = item.icon;
+                  const isActive = activeTab === item.id;
+
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setActiveTab(item.id as any);
+                        setIsMobileMenuOpen(false);
+                        const element = document.getElementById("primary-view-container");
+                        if (element) {
+                          element.scrollIntoView({ behavior: "smooth", block: "start" });
+                        }
+                      }}
+                      className={`p-3 rounded-2xl border text-right flex flex-col gap-2 transition-all outline-none duration-150 cursor-pointer active:scale-95 ${
+                        isActive
+                          ? "border-pink-500 bg-pink-500/5 text-pink-400 ring-2 ring-pink-500/20"
+                          : "border-white/5 bg-slate-900/60 text-slate-300 hover:bg-slate-900 hover:border-white/10"
+                      }`}
+                    >
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center border ${item.color}`}>
+                        <Icon size={16} />
+                      </div>
+                      <div>
+                        <div className="text-[11.5px] font-black leading-none">{item.label}</div>
+                        <div className="text-[9px] text-slate-500 mt-1 leading-none">{item.desc}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Quick tip */}
+              <div className="bg-slate-900/40 p-3 rounded-xl border border-white/5 text-[10px] text-slate-400 text-center select-none leading-relaxed Persian-font mt-1">
+                🏆 تمام اطلاعات و رکوردهای شما به صورت لایو با همگام‌سازی سرور دانش‌آموزی شاد حفظ خواهند شد.
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

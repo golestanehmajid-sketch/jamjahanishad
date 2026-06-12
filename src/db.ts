@@ -38,6 +38,7 @@ export interface ShadProfileInput {
 const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), "data");
 const PARTICIPANTS_FILE = path.join(DATA_DIR, "participants.json");
 const ACTION_LOGS_FILE = path.join(DATA_DIR, "action_logs.json");
+const PREDICTIONS_FILE = path.join(DATA_DIR, "predictions.json");
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -190,6 +191,25 @@ async function migrateActionLogsTable() {
   `);
 }
 
+async function migratePredictionsTable() {
+  if (!pool) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS predictions (
+      id VARCHAR(255) PRIMARY KEY,
+      participant_id VARCHAR(200) NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
+      match_id VARCHAR(100) NOT NULL,
+      score_a INT,
+      score_b INT,
+      winner_id VARCHAR(100),
+      updated_at VARCHAR(100) NOT NULL
+    )
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_predictions_participant_match
+    ON predictions (participant_id, match_id)
+  `);
+}
+
 export async function initDb() {
   if (isDbInitialized) return;
 
@@ -198,6 +218,7 @@ export async function initDb() {
       console.log("⏳ Initializing database tables in PostgreSQL...");
       await migrateParticipantsTable();
       await migrateActionLogsTable();
+      await migratePredictionsTable();
       isDbInitialized = true;
       console.log("❇️ PostgreSQL initialization completed.");
     } catch (err) {
@@ -214,6 +235,9 @@ export async function initDb() {
       }
       if (!fs.existsSync(ACTION_LOGS_FILE)) {
         fs.writeFileSync(ACTION_LOGS_FILE, "[]", "utf-8");
+      }
+      if (!fs.existsSync(PREDICTIONS_FILE)) {
+        fs.writeFileSync(PREDICTIONS_FILE, "{}", "utf-8");
       }
       isDbInitialized = true;
       console.log("❇️ Local file storage initialized successfully.");
@@ -533,9 +557,8 @@ export async function dbSaveActionLog(log: ActionLog): Promise<ActionLog> {
 
   const list = await dbGetActionLogs();
   list.unshift(log); // newest first
-  // Limit to 1000 items to keep files small
-  const limited = list.slice(0, 1000);
-  fs.writeFileSync(ACTION_LOGS_FILE, JSON.stringify(limited, null, 2), "utf-8");
+  // Keep logs complete without deleting/truncating any data as requested
+  fs.writeFileSync(ACTION_LOGS_FILE, JSON.stringify(list, null, 2), "utf-8");
   return log;
 }
 
@@ -552,4 +575,96 @@ export async function dbClearActionLogs(): Promise<boolean> {
 
   fs.writeFileSync(ACTION_LOGS_FILE, JSON.stringify([], null, 2), "utf-8");
   return true;
+}
+
+export async function dbSaveUserPredictions(participantId: string, predictions: any[]): Promise<boolean> {
+  await initDb();
+  if (!participantId) return false;
+
+  const updatedAt = new Date().toISOString();
+
+  if (pool) {
+    try {
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        for (const pred of predictions) {
+          const id = `${participantId}_${pred.matchId}`;
+          await client.query(`
+            INSERT INTO predictions (id, participant_id, match_id, score_a, score_b, winner_id, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (id) DO UPDATE SET
+              score_a = EXCLUDED.score_a,
+              score_b = EXCLUDED.score_b,
+              winner_id = EXCLUDED.winner_id,
+              updated_at = EXCLUDED.updated_at
+          `, [id, participantId, pred.matchId, pred.scoreA, pred.scoreB, pred.winnerId || null, updatedAt]);
+        }
+        await client.query("COMMIT");
+        return true;
+      } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+      } finally {
+        client.release();
+      }
+    } catch (err) {
+      console.error("Error saving predictions in PostgreSQL, falling back to files:", err);
+    }
+  }
+
+  try {
+    ensureDataDir();
+    let dataMap: Record<string, any[]> = {};
+    if (fs.existsSync(PREDICTIONS_FILE)) {
+      const content = fs.readFileSync(PREDICTIONS_FILE, "utf-8");
+      dataMap = JSON.parse(content);
+    }
+    dataMap[participantId] = predictions.map(p => ({
+      matchId: p.matchId,
+      scoreA: p.scoreA,
+      scoreB: p.scoreB,
+      winnerId: p.winnerId || null,
+      updatedAt
+    }));
+    fs.writeFileSync(PREDICTIONS_FILE, JSON.stringify(dataMap, null, 2), "utf-8");
+    return true;
+  } catch (err) {
+    console.error("Error writing local predictions file:", err);
+    return false;
+  }
+}
+
+export async function dbGetUserPredictions(participantId: string): Promise<any[]> {
+  await initDb();
+  if (!participantId) return [];
+
+  if (pool) {
+    try {
+      const res = await pool.query(
+        "SELECT match_id as \"matchId\", score_a as \"scoreA\", score_b as \"scoreB\", winner_id as \"winnerId\" FROM predictions WHERE participant_id = $1",
+        [participantId]
+      );
+      return res.rows.map(row => ({
+        matchId: row.matchId,
+        scoreA: row.scoreA,
+        scoreB: row.scoreB,
+        winnerId: row.winnerId
+      }));
+    } catch (err) {
+      console.error("Error reading predictions from PostgreSQL, falling back to files:", err);
+    }
+  }
+
+  try {
+    if (fs.existsSync(PREDICTIONS_FILE)) {
+      const content = fs.readFileSync(PREDICTIONS_FILE, "utf-8");
+      const dataMap = JSON.parse(content);
+      return dataMap[participantId] || [];
+    }
+  } catch (err) {
+    console.error("Error parsing local predictions file:", err);
+  }
+
+  return [];
 }
