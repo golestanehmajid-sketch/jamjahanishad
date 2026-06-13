@@ -305,68 +305,88 @@ export const IranSupporterHub: React.FC<IranSupporterHubProps> = ({
                     return (
                       <div 
                         key={m.id} 
-                        className="bg-slate-900/70 p-2 rounded-lg border border-white/5 flex items-center justify-between gap-2 hover:border-emerald-500/20 dynamic-glow"
+                        className="bg-slate-900/70 p-3 rounded-xl border border-white/5 flex flex-col gap-2 hover:border-emerald-500/20 dynamic-glow animate-fade-in"
                       >
-                        {/* Opponent flag & Name */}
-                        <div className="flex items-center gap-1.5 min-w-[75px]">
-                          <TeamFlag team={opponent} className="w-5 h-3.5 shadow-sm rounded-sm" />
-                          <span className="text-[11px] font-extrabold text-slate-200">مقابل {opponent.name}</span>
+                        {/* Match Title/Info Row */}
+                        <div className="flex items-center justify-between text-[10px] text-slate-400 border-b border-white/5 pb-1.5 select-none">
+                          <span className="font-bold flex items-center gap-1 text-emerald-400">
+                            <span>🦁 بازی {toFa(m.id.includes("1") || m.id.includes("newzealand") ? "اول" : m.id.includes("egypt") ? "دوم" : "سوم")} ایران در گروه G</span>
+                          </span>
+                          <span className="font-bold text-[9.5px] text-slate-300 bg-slate-950/60 px-1.5 py-0.5 rounded border border-white/5">
+                            شانس برد ایران: %{toFa(winChance)}
+                          </span>
                         </div>
 
-                        {/* Mid controllers for scorers */}
-                        <div className="flex items-center gap-1.5">
-                          {/* Iran Score adjustment */}
-                          <div className={`flex items-center bg-slate-950 p-1 px-1.5 rounded-md border border-emerald-500/10 gap-1 ${m.isLive || m.isOfficial ? "opacity-50" : ""}`}>
-                            <button
-                              type="button"
-                              disabled={m.isLive || m.isOfficial}
-                              onClick={() => handleAdjustIran(-1)}
-                              className="w-4.5 h-4.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 border border-white/5 flex items-center justify-center cursor-pointer active:scale-90 text-[10px] disabled:opacity-20 disabled:pointer-events-none"
-                            >
-                              <Minus size={8} strokeWidth={3} />
-                            </button>
-                            <span className="text-[11px] font-black text-green-300 w-3.5 text-center">
-                              {toFa(iranScore !== null ? iranScore : 0)}
-                            </span>
-                            <button
-                              type="button"
-                              disabled={m.isLive || m.isOfficial}
-                              onClick={() => handleAdjustIran(1)}
-                              className="w-4.5 h-4.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 border border-white/5 flex items-center justify-center cursor-pointer active:scale-90 text-[10px] disabled:opacity-20 disabled:pointer-events-none"
-                            >
-                              <Plus size={8} strokeWidth={3} />
-                            </button>
+                        {/* Teams and Scores interactive layout */}
+                        <div className="grid grid-cols-11 items-center gap-1 sm:gap-2 pt-0.5">
+                          
+                          {/* Right side: IRAN (RTL priority alignment for Persian viewers) */}
+                          <div className="col-span-5 flex items-center gap-1.5 justify-end">
+                            <span className="text-[11px] font-black text-emerald-400 Persian-font">ایران</span>
+                            <TeamFlag team={iranTeam} className="w-5 h-3.5 shadow-sm rounded-sm shrink-0" />
+                            
+                            {/* Controller for Iran */}
+                            <div className={`flex items-center bg-slate-950 px-1.5 py-0.5 rounded-md border border-emerald-500/30 gap-1.5 shrink-0 ${m.isLive || m.isOfficial ? "opacity-60" : ""}`}>
+                              <button
+                                type="button"
+                                disabled={m.isLive || m.isOfficial}
+                                onClick={() => handleAdjustIran(-1)}
+                                className="w-4.5 h-4.5 rounded bg-slate-900 hover:bg-slate-850 text-slate-400 border border-white/5 flex items-center justify-center cursor-pointer active:scale-90 text-[9px] disabled:opacity-20 disabled:pointer-events-none"
+                                title="کاهش گل ایران"
+                              >
+                                <Minus size={8} strokeWidth={3} />
+                              </button>
+                              <span className="text-[11px] font-black text-emerald-300 w-3 text-center">
+                                {toFa(iranScore !== null ? iranScore : 0)}
+                              </span>
+                              <button
+                                type="button"
+                                disabled={m.isLive || m.isOfficial}
+                                onClick={() => handleAdjustIran(1)}
+                                className="w-4.5 h-4.5 rounded bg-slate-900 hover:bg-slate-850 text-slate-400 border border-white/5 flex items-center justify-center cursor-pointer active:scale-90 text-[9px] disabled:opacity-20 disabled:pointer-events-none"
+                                title="افزایش گل ایران"
+                              >
+                                <Plus size={8} strokeWidth={3} />
+                              </button>
+                            </div>
                           </div>
 
-                          <span className="text-[9px] text-slate-500 font-bold">:</span>
-
-                          {/* Opponent Score adjustment */}
-                          <div className={`flex items-center bg-slate-950 p-1 px-1.5 rounded-md border border-red-500/10 gap-1 ${m.isLive || m.isOfficial ? "opacity-50" : ""}`}>
-                            <button
-                              type="button"
-                              disabled={m.isLive || m.isOfficial}
-                              onClick={() => handleAdjustOpp(-1)}
-                              className="w-4.5 h-4.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 border border-white/5 flex items-center justify-center cursor-pointer active:scale-90 text-[10px] disabled:opacity-20 disabled:pointer-events-none"
-                            >
-                              <Minus size={8} strokeWidth={3} />
-                            </button>
-                            <span className="text-[11px] font-black text-red-300 w-3.5 text-center">
-                              {toFa(oppScore !== null ? oppScore : 0)}
-                            </span>
-                            <button
-                              type="button"
-                              disabled={m.isLive || m.isOfficial}
-                              onClick={() => handleAdjustOpp(1)}
-                              className="w-4.5 h-4.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 border border-white/5 flex items-center justify-center cursor-pointer active:scale-90 text-[10px] disabled:opacity-20 disabled:pointer-events-none"
-                            >
-                              <Plus size={8} strokeWidth={3} />
-                            </button>
+                          {/* Center separator badge */}
+                          <div className="col-span-1 flex flex-col items-center justify-center text-center">
+                            <span className="text-[9.5px] font-extrabold text-slate-500 select-none">vs</span>
                           </div>
-                        </div>
 
-                        {/* Probability mini chance indicator */}
-                        <div className="text-[9.5px] font-mono font-bold text-slate-400 bg-slate-950/60 px-1 py-0.5 rounded border border-white/5 hidden xs:block">
-                          برد 🇮🇷: %{toFa(winChance)}
+                          {/* Left side: Opponent Team */}
+                          <div className="col-span-5 flex items-center gap-1.5 justify-start flex-row-reverse">
+                            <span className="text-[11px] font-black text-slate-300 text-right truncate max-w-[65px] sm:max-w-[100px] leading-none Persian-font">{opponent.name}</span>
+                            <TeamFlag team={opponent} className="w-5 h-3.5 shadow-sm rounded-sm shrink-0" />
+
+                            {/* Controller for Opponent */}
+                            <div className={`flex items-center bg-slate-950 px-1.5 py-0.5 rounded-md border border-red-500/30 gap-1.5 shrink-0 ${m.isLive || m.isOfficial ? "opacity-60" : ""}`}>
+                              <button
+                                type="button"
+                                disabled={m.isLive || m.isOfficial}
+                                onClick={() => handleAdjustOpp(-1)}
+                                className="w-4.5 h-4.5 rounded bg-slate-900 hover:bg-slate-850 text-slate-400 border border-white/5 flex items-center justify-center cursor-pointer active:scale-90 text-[9px] disabled:opacity-20 disabled:pointer-events-none"
+                                title={`کاهش گل ${opponent.name}`}
+                              >
+                                <Minus size={8} strokeWidth={3} />
+                              </button>
+                              <span className="text-[11px] font-black text-red-300 w-3 text-center">
+                                {toFa(oppScore !== null ? oppScore : 0)}
+                              </span>
+                              <button
+                                type="button"
+                                disabled={m.isLive || m.isOfficial}
+                                onClick={() => handleAdjustOpp(1)}
+                                className="w-4.5 h-4.5 rounded bg-slate-900 hover:bg-slate-850 text-slate-400 border border-white/5 flex items-center justify-center cursor-pointer active:scale-90 text-[9px] disabled:opacity-20 disabled:pointer-events-none"
+                                title={`افزایش گل ${opponent.name}`}
+                              >
+                                <Plus size={8} strokeWidth={3} />
+                              </button>
+                            </div>
+                          </div>
+
                         </div>
                       </div>
                     );
