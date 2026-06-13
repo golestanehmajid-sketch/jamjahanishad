@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { toPng } from "html-to-image";
 import { Team, Match, Group, GroupStanding, Achievement } from "./types";
-import { TEAMS, GROUPS, generateGroupMatches, ACHIEVEMENTS_DATA, getMatchDay } from "./data";
+import { TEAMS, GROUPS, generateGroupMatches, ACHIEVEMENTS_DATA, getMatchDay, getMatchKickoffDate } from "./data";
 import { calculateStandings, simulateMatchScore, checkUnlockedAchievements } from "./utils";
 import { MatchRow } from "./components/MatchRow";
 import { GroupStandings } from "./components/GroupStandings";
@@ -18,6 +18,7 @@ import { IranSupporterHub } from "./components/IranSupporterHub";
 import { TeensGiftHub } from "./components/TeensGiftHub";
 import { ParticipantsDashboard } from "./components/ParticipantsDashboard";
 import { AppAdminDashboard } from "./components/AppAdminDashboard";
+import { ResultsAdminDashboard } from "./components/ResultsAdminDashboard";
 import { RulesAndPrizes } from "./components/RulesAndPrizes";
 import { trackUserAction } from "./utils/tracker";
 import {
@@ -255,6 +256,14 @@ export default function App() {
   });
   const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "waiting" | "saving" | "saved" | "error">("idle");
   const [isSubmittingToDB, setIsSubmittingToDB] = useState<boolean>(false);
+  const [isResultsAdminMode, setIsResultsAdminMode] = useState<boolean>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const path = window.location.pathname.toLowerCase();
+    const hash = window.location.hash.toLowerCase();
+    return params.has("results") || params.has("scores") ||
+           path.includes("/results") || path.includes("/scores") ||
+           hash.includes("results") || hash.includes("scores") || hash.includes("resultsadmin");
+  });
   const [isAdminMode, setIsAdminMode] = useState<boolean>(() => {
     const params = new URLSearchParams(window.location.search);
     const path = window.location.pathname.toLowerCase();
@@ -264,10 +273,12 @@ export default function App() {
            hash.includes("admin") || hash.includes("panel");
   });
 
-  const [activeTab, setActiveTab] = useState<"groups" | "standings" | "knockout" | "achievements" | "sportsNews" | "participants" | "adminDashboard" | "rules">(() => {
+  const [activeTab, setActiveTab] = useState<"groups" | "standings" | "knockout" | "achievements" | "sportsNews" | "participants" | "adminDashboard" | "resultsAdmin" | "rules">(() => {
     const params = new URLSearchParams(window.location.search);
     const path = window.location.pathname.toLowerCase();
     const hash = window.location.hash.toLowerCase();
+    const isResults = params.has("results") || params.has("scores") || path.includes("/results") || hash.includes("results") || hash.includes("resultsadmin");
+    if (isResults) return "resultsAdmin";
     const isAdmin = params.has("admin") || params.has("panel") || params.get("mode") === "admin" ||
                     path.includes("/admin") || path.includes("/panel") ||
                     hash.includes("admin") || hash.includes("panel");
@@ -280,6 +291,14 @@ export default function App() {
       const params = new URLSearchParams(window.location.search);
       const path = window.location.pathname.toLowerCase();
       const hash = window.location.hash.toLowerCase();
+      
+      const isResults = params.has("results") || params.has("scores") || path.includes("/results") || hash.includes("results") || hash.includes("resultsadmin");
+      if (isResults) {
+        setIsResultsAdminMode(true);
+        setActiveTab("resultsAdmin");
+        return;
+      }
+      
       const isAdmin = params.has("admin") || params.has("panel") || params.get("mode") === "admin" ||
                       path.includes("/admin") || path.includes("/panel") ||
                       hash.includes("admin") || hash.includes("panel");
@@ -598,10 +617,14 @@ export default function App() {
   // 4. ACTION HANDLERS
   // ----------------------------------------------------
   const handleScoreChange = (matchId: string, scoreA: number | null, scoreB: number | null) => {
-    // Prevent changing score if match has already started (live or official)
+    // Prevent changing score if match has already started (live or official or chronologically past)
     const match = matches.find((m) => m.id === matchId);
-    if (match && (match.isLive || match.isOfficial)) {
-      return;
+    if (match) {
+      const kickoff = getMatchKickoffDate(matchId);
+      const isLocked = match.isLive || match.isOfficial || (new Date() >= kickoff);
+      if (isLocked) {
+        return;
+      }
     }
     
     setMatches((prev) =>
@@ -616,8 +639,10 @@ export default function App() {
   const handleSimulateMatch = (matchId: string) => {
     const match = matches.find((m) => m.id === matchId);
     if (!match) return;
-    // Prevent simulation if match has already started (live or official)
-    if (match.isLive || match.isOfficial) return;
+    // Prevent simulation if match has already started (live or official or chronologically past)
+    const kickoff = getMatchKickoffDate(matchId);
+    const isLocked = match.isLive || match.isOfficial || (new Date() >= kickoff);
+    if (isLocked) return;
     
     const result = simulateMatchScore(match.teamA.strength, match.teamB.strength);
     handleScoreChange(matchId, result.scoreA, result.scoreB);
@@ -679,11 +704,53 @@ export default function App() {
   useEffect(() => {
     // High-fidelity matching helper to pair static teams with scraped teams
     const matchTeamEn = (team: { name: string; nameEn: string }, scraped: { name: string; nameEn?: string }) => {
-      if (scraped.nameEn && team.nameEn && scraped.nameEn.toLowerCase() === team.nameEn.toLowerCase()) return true;
-      if (scraped.name && team.name && scraped.name.trim() === team.name.trim()) return true;
-      const norm = (s: string) => s.replace(/\s+/g, "").toLowerCase();
-      if (scraped.nameEn && team.nameEn && norm(scraped.nameEn) === norm(team.nameEn)) return true;
-      if (scraped.name && team.name && norm(scraped.name) === norm(team.name)) return true;
+      if (!scraped) return false;
+      const scrapEn = (scraped.nameEn || "").trim().toLowerCase();
+      const scrapFa = (scraped.name || "").trim();
+      const teamEn = team.nameEn.trim().toLowerCase();
+      const teamFa = team.name.trim();
+
+      if (scrapEn === teamEn || scrapFa === teamFa) return true;
+
+      // Class-standard normalization helper
+      const norm = (s: string) => s.replace(/[\s\-_']+/g, "").toLowerCase();
+      const normScrapedEn = norm(scrapEn);
+      const normTeamEn = norm(teamEn);
+      if (normScrapedEn === normTeamEn || norm(scrapFa) === norm(teamFa)) return true;
+
+      // Custom high-fidelity synonym groups
+      const synonyms: Record<string, string[]> = {
+        "usa": ["united states", "united states of america", "us", "america", "آمریکا", "ایالات متحده"],
+        "korea": ["south korea", "korea republic", "korea", "korea rep", "کره جنوبی", "کره"],
+        "drcongo": ["dr congo", "congo dr", "democratic republic of the congo", "congo", "کنگو", "جمهوری دموکراتیک کنگو"],
+        "czech": ["czech republic", "czechia", "czech", "جمهوری چک", "چک"],
+        "ivorycoast": ["ivory coast", "côte d'ivoire", "cote d'ivoire", "ivorycoast", "ساحل عاج"],
+        "saudi": ["saudi arabia", "saudi", "saudi_arabia", "عربستان", "عربستان سعودی"],
+        "southafrica": ["south africa", "s. africa", "آفریقای جنوبی"],
+        "newzealand": ["new zealand", "n. zealand", "نیوزیلند"],
+        "capeverde": ["cape verde", "cabo verde", "کیپ ورد"],
+        "morocco": ["morocco", "مراکش", "مغرب"],
+        "england": ["england", "انگلستان", "انگلیس"]
+      };
+
+      for (const [key, list] of Object.entries(synonyms)) {
+        const isTeamMatch = normTeamEn.includes(key) || key.includes(normTeamEn);
+        if (isTeamMatch) {
+          const matchFound = list.some(item => {
+            const lowerItem = item.toLowerCase();
+            return scrapEn === lowerItem || scrapFa === item || norm(scrapEn) === norm(lowerItem);
+          });
+          if (matchFound) return true;
+        }
+      }
+
+      // Check substring match
+      if (normScrapedEn.length > 3 && normTeamEn.length > 3) {
+        if (normScrapedEn.includes(normTeamEn) || normTeamEn.includes(normScrapedEn)) {
+          return true;
+        }
+      }
+
       return false;
     };
 
@@ -2224,6 +2291,20 @@ export default function App() {
               transition={{ duration: 0.15 }}
             >
               <AppAdminDashboard />
+            </motion.div>
+          )}
+
+          {/* Results Admin manual outcomes view */}
+          {activeTab === "resultsAdmin" && (
+            <motion.div
+              id="view-results-admin"
+              key="results-admin"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.15 }}
+            >
+              <ResultsAdminDashboard />
             </motion.div>
           )}
 

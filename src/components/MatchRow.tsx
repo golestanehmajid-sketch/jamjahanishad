@@ -8,6 +8,7 @@ import { Match, Team } from "../types";
 import { Dices, Plus, Minus, RotateCcw, X, Edit3 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { TeamFlag } from "./TeamFlag";
+import { getMatchKickoffDate } from "../data";
 
 interface MatchRowProps {
   match: Match;
@@ -20,6 +21,21 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
   const { teamA, teamB, scoreA, scoreB, id, isOfficial, isLive, minute } = match;
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [showSavedPulse, setShowSavedPulse] = useState(false);
+
+  const kickoff = getMatchKickoffDate(id);
+  const isTimeLocked = React.useMemo(() => new Date() >= kickoff, [kickoff]);
+  const isLocked = isOfficial || isLive || isTimeLocked;
+
+  const kickoffShamsiDate = React.useMemo(() => {
+    try {
+      const datePart = kickoff.toLocaleDateString("fa-IR", { month: "long", day: "numeric" });
+      const timePart = kickoff.toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" });
+      return `${datePart} - ساعت ${timePart}`;
+    } catch (e) {
+      return "";
+    }
+  }, [kickoff]);
+
 
   React.useEffect(() => {
     if (showSavedPulse) {
@@ -110,9 +126,16 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
       >
         {/* Top Details Header of Match (Unified for mobile & desktop) */}
         <div className="flex items-center justify-between border-b border-white/5 pb-2.5">
-          <span className="text-[10px] sm:text-xs font-black text-slate-400 bg-slate-950/50 border border-white/5 px-2.5 py-0.5 rounded-full font-mono">
-            {displayDay ? `روز ${toPersianDigits(getMatchDayNumber(id))} گروهی` : `گروه ${id.split("-")[1]}`}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] sm:text-xs font-black text-slate-400 bg-slate-950/50 border border-white/5 px-2.5 py-0.5 rounded-full font-mono">
+              {displayDay ? `روز ${toPersianDigits(getMatchDayNumber(id))} گروهی` : `گروه ${id.split("-")[1]}`}
+            </span>
+            {kickoffShamsiDate && (
+              <span className="text-[10px] sm:text-xs text-slate-400 font-bold bg-slate-950/20 border border-white/5 px-2 py-0.5 rounded-full font-sans">
+                {kickoffShamsiDate}
+              </span>
+            )}
+          </div>
 
           {/* Status indicator / live / official */}
           <div className="flex items-center gap-1.5">
@@ -125,6 +148,10 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
               <span className="bg-emerald-500/15 border border-emerald-500/30 text-[10px] text-emerald-400 font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1 select-none">
                 🔒 نتیجه رسمی فیفا
               </span>
+            ) : isTimeLocked ? (
+              <span className="bg-slate-800/80 border border-white/5 text-[10px] text-slate-400 font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1 select-none font-sans">
+                🔒 شروع شد (پیش‌بینی قفل)
+              </span>
             ) : (
               <span className="text-[9.5px] text-slate-500 font-bold select-none">فاز مقدماتی گروهی</span>
             )}
@@ -136,12 +163,12 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
           <div 
             id={`mobile-touch-selector-${id}`}
             onClick={() => {
-              if (!isOfficial && !isLive) {
+              if (!isLocked) {
                 setIsDrawerOpen(true);
               }
             }}
             className={`flex items-center justify-between bg-slate-950/40 p-3.5 rounded-xl border border-white/5 active:bg-slate-950/60 transition-all ${
-              !isOfficial && !isLive ? "cursor-pointer hover:border-purple-500/30" : "cursor-not-allowed opacity-80"
+              !isLocked ? "cursor-pointer hover:border-purple-500/30" : "cursor-not-allowed opacity-80"
             }`}
           >
             {/* Team stack list left side */}
@@ -169,7 +196,7 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
                   {scoreB !== null ? toPersianDigits(scoreB) : "—"}
                 </span>
               </div>
-              {!isOfficial && !isLive ? (
+              {!isLocked ? (
                 <span className="text-[9.5px] text-purple-400 mt-1 font-bold Persian-font flex items-center gap-0.5 justify-center">
                   <Edit3 size={9} />
                   <span>ثبت امتیاز</span>
@@ -209,7 +236,7 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
               <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  disabled={isOfficial || isLive}
+                  disabled={isLocked}
                   onClick={() => handleDecrement("A")}
                   className="w-10 h-10 rounded-xl bg-slate-900 border border-white/10 text-slate-300 hover:text-red-400 hover:border-red-500/30 hover:bg-slate-800 flex items-center justify-center cursor-pointer active:scale-95 disabled:pointer-events-none disabled:opacity-25 transition-all font-bold"
                   title="کاهش گل میزبان"
@@ -227,7 +254,7 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
                 
                 <button
                   type="button"
-                  disabled={isOfficial || isLive}
+                  disabled={isLocked}
                   onClick={() => handleIncrement("A")}
                   className="w-10 h-10 rounded-xl bg-slate-900 border border-white/10 text-slate-300 hover:text-purple-400 hover:border-purple-500/30 hover:bg-slate-800 flex items-center justify-center cursor-pointer active:scale-95 disabled:pointer-events-none disabled:opacity-25 transition-all font-bold"
                   title="افزایش گل میزبان"
@@ -242,7 +269,7 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
               <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  disabled={isOfficial || isLive}
+                  disabled={isLocked}
                   onClick={() => handleDecrement("B")}
                   className="w-10 h-10 rounded-xl bg-slate-900 border border-white/10 text-slate-300 hover:text-red-400 hover:border-red-500/30 hover:bg-slate-800 flex items-center justify-center cursor-pointer active:scale-95 disabled:pointer-events-none disabled:opacity-25 transition-all font-bold"
                   title="کاهش گل مهمان"
@@ -260,7 +287,7 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
                 
                 <button
                   type="button"
-                  disabled={isOfficial || isLive}
+                  disabled={isLocked}
                   onClick={() => handleIncrement("B")}
                   className="w-10 h-10 rounded-xl bg-slate-900 border border-white/10 text-slate-300 hover:text-purple-400 hover:border-purple-500/30 hover:bg-slate-800 flex items-center justify-center cursor-pointer active:scale-95 disabled:pointer-events-none disabled:opacity-25 transition-all font-bold"
                   title="افزایش گل مهمان"
@@ -307,7 +334,7 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
 
           {/* Quick simulation / reset buttons */}
           <div className="flex items-center gap-2">
-            {hasScore && !isOfficial && !isLive && (
+            {hasScore && !isLocked && (
               <button
                 type="button"
                 onClick={handleClearScore}
@@ -318,7 +345,7 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
               </button>
             )}
 
-            {!isOfficial && !isLive ? (
+            {!isLocked ? (
               <button
                 type="button"
                 onClick={handleSimulate}

@@ -210,3 +210,152 @@ export function getMatchDay(matchId: string): number {
   return (phase * 4) + cluster + 1; // 1 to 12
 }
 
+/**
+ * Calculates simulated real World Cup 2026 chronological kickoff date in June 2026
+ * Day 1 = June 11, Day 12 = June 22. Slots are 14:00, 17:00, 20:00 UTC.
+ */
+const MATCH_KICKOFF_MAP: Record<string, string> = {
+  // June 13, 2026 (Day 1)
+  "mexico-southafrica": "13.06 18:30",
+  "czech-korea": "13.06 20:30",
+  "qatar-switzerland": "13.06 22:30",
+
+  // June 14, 2026 (Day 2)
+  "brazil-morocco": "14.06 01:30",
+  "haiti-scotland": "14.06 04:30",
+  "australia-turkey": "14.06 07:30",
+  "bosnia-canada": "14.06 18:30",
+  "curacao-germany": "14.06 20:30",
+  "paraguay-usa": "14.06 21:30",
+  "japan-netherlands": "14.06 23:30",
+
+  // June 15, 2026 (Day 3)
+  "ecuador-ivorycoast": "15.06 02:30",
+  "sweden-tunisia": "15.06 05:30",
+  "capeverde-spain": "15.06 19:30",
+  "belgium-egypt": "15.06 22:30",
+
+  // June 16, 2026 (Day 4)
+  "saudi-uruguay": "16.06 01:30",
+  "iran-newzealand": "16.06 04:30",
+  "france-senegal": "16.06 22:30",
+
+  // June 17, 2026 (Day 5)
+  "iraq-norway": "17.06 01:30",
+  "algeria-argentina": "17.06 04:30",
+  "austria-jordan": "17.06 07:30",
+  "drcongo-portugal": "17.06 20:30",
+  "croatia-england": "17.06 23:30",
+
+  // June 18, 2026 (Day 6)
+  "ghana-panama": "18.06 02:30",
+  "colombia-uzbekistan": "18.06 05:30",
+  "czech-southafrica": "18.06 19:30",
+  "bosnia-switzerland": "18.06 22:30",
+
+  // June 19, 2026 (Day 7)
+  "canada-qatar": "19.06 01:30",
+  "korea-mexico": "19.06 04:30",
+  "australia-usa": "19.06 22:30",
+
+  // June 20, 2026 (Day 8)
+  "morocco-scotland": "20.06 01:30",
+  "brazil-haiti": "20.06 04:00",
+  "paraguay-turkey": "20.06 06:30",
+  "netherlands-sweden": "20.06 20:30",
+  "germany-ivorycoast": "20.06 23:30",
+
+  // June 21, 2026 (Day 9)
+  "curacao-ecuador": "21.06 03:30",
+  "japan-tunisia": "21.06 07:30",
+  "saudi-spain": "21.06 19:30",
+  "belgium-iran": "21.06 22:30",
+
+  // June 22, 2026 (Day 10)
+  "capeverde-uruguay": "22.06 01:30",
+  "egypt-newzealand": "22.06 04:30",
+  "argentina-austria": "22.06 20:30",
+
+  // June 23, 2026 (Day 11)
+  "france-iraq": "23.06 00:30",
+  "norway-senegal": "23.06 03:30",
+  "algeria-jordan": "23.06 06:30",
+  "portugal-uzbekistan": "23.06 20:30",
+  "england-ghana": "23.06 23:30",
+
+  // June 24, 2026 (Day 12)
+  "croatia-panama": "24.06 02:30",
+  "colombia-drcongo": "24.06 05:30",
+  "bosnia-qatar": "24.06 22:30",
+  "canada-switzerland": "24.06 22:30",
+
+  // June 25, 2026 (Day 13)
+  "haiti-morocco": "25.06 01:30",
+  "brazil-scotland": "25.06 01:30",
+  "czech-mexico": "25.06 04:30",
+  "korea-southafrica": "25.06 04:30",
+  "curacao-ivorycoast": "25.06 23:30",
+  "ecuador-germany": "25.06 23:30",
+
+  // June 26, 2026 (Day 14)
+  "japan-sweden": "26.06 02:30",
+  "netherlands-tunisia": "26.06 02:30",
+  "australia-paraguay": "26.06 05:30",
+  "turkey-usa": "26.06 05:30",
+  "france-norway": "26.06 22:30",
+  "iraq-senegal": "26.06 22:30",
+
+  // June 27, 2026 (Day 15)
+  "capeverde-saudi": "27.06 03:30",
+  "spain-uruguay": "27.06 03:30",
+  "egypt-iran": "27.06 06:30",
+  "belgium-newzealand": "27.06 06:30",
+
+  // June 28, 2026 (Day 16)
+  "croatia-ghana": "28.06 00:30",
+  "england-panama": "28.06 00:30",
+  "colombia-portugal": "28.06 03:00",
+  "drcongo-uzbekistan": "28.06 03:00",
+  "algeria-austria": "28.06 05:30",
+  "argentina-jordan": "28.06 05:30"
+};
+
+function parseTehranTimeToUTCDate(dateStr: string): Date {
+  const [dayMonth, timeStr] = dateStr.split(" ");
+  const [day, month] = dayMonth.split(".").map(Number);
+  const [hour, minute] = timeStr.split(":").map(Number);
+  const d = new Date(Date.UTC(2026, month - 1, day, hour, minute, 0));
+  d.setTime(d.getTime() - (3.5 * 60 * 60 * 1000));
+  return d;
+}
+
+let cachedGroupMatchesList: Match[] | null = null;
+function getCachedGroupMatches(): Match[] {
+  if (!cachedGroupMatchesList) {
+    cachedGroupMatchesList = generateGroupMatches();
+  }
+  return cachedGroupMatchesList;
+}
+
+export function getMatchKickoffDate(matchId: string): Date {
+  const matches = getCachedGroupMatches();
+  const found = matches.find(m => m.id === matchId);
+  if (found) {
+    const idA = found.teamA.id;
+    const idB = found.teamB.id;
+    const sortedPairKey = [idA, idB].sort().join("-");
+    const dateStr = MATCH_KICKOFF_MAP[sortedPairKey];
+    if (dateStr) {
+      return parseTehranTimeToUTCDate(dateStr);
+    }
+  }
+  // Safe default matching UTC date if anything is anomalous
+  const dayNum = getMatchDay(matchId);
+  const dateNum = 10 + dayNum; // Starts June 11, 2026  
+  const parts = matchId.split("-");
+  const matchIndex = parts.length >= 3 ? parseInt(parts[2], 10) : 1;
+  const hours = [14, 17, 20][(matchIndex - 1) % 3] || 17;
+  return new Date(Date.UTC(2026, 5, dateNum, hours, 0, 0));
+}
+
+

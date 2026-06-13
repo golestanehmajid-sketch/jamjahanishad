@@ -196,7 +196,7 @@ export const SoccerLiveTracker: React.FC<SoccerLiveTrackerProps> = ({
               {loadingScores ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-3 text-slate-400">
                   <RefreshCw size={36} className="animate-spin text-red-500" />
-                  <span className="text-xs font-bold animate-pulse">در حال فراخوانی جدول مسابقات جاری از LiveScore...</span>
+                  <span className="text-xs font-bold animate-pulse">در حال فراخوانی جدول مسابقات جاری از ScoreAxis و گوگل...</span>
                 </div>
               ) : errorScores ? (
                 <div className="p-4 bg-red-950/20 border border-red-500/20 rounded-xl flex items-start gap-3">
