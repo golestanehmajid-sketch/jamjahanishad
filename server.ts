@@ -1035,27 +1035,46 @@ const translateTeamName = (englishName: string): string => {
 };
 
 const getFlagLogo = (name: string): string => {
-  const flags: { [key: string]: string } = {
-    "Mexico": "mx", "South Africa": "za", "USA": "us", "United States": "us",
-    "Iran": "ir", "Brazil": "br", "France": "fr", "England": "gb",
-    "Italy": "it", "Spain": "es", "Germany": "de", "Argentina": "ar",
-    "Portugal": "pt", "Japan": "jp", "South Korea": "kr", "Croatia": "hr",
-    "Morocco": "ma", "Senegal": "sn", "Netherlands": "nl", "Belgium": "be",
-    "Switzerland": "ch", "Uruguay": "uy", "Saudi Arabia": "sa", "Canada": "ca",
-    "Qatar": "qa", "Ecuador": "ec", "Wales": "gb-wls", "Australia": "au",
-    "Tunisia": "tn", "Poland": "pl", "Denmark": "dk", "Costa Rica": "cr",
-    "Serbia": "rs", "Cameroon": "cm", "Ghana": "gh",
-    "مکزیک": "mx", "آفریقای جنوبی": "za", "آمریکا": "us", "ایران": "ir",
-    "برزیل": "br", "فرانسه": "fr", "انگلستان": "gb", "ایتالیا": "it",
-    "اسپانیا": "es", "آلمان": "de", "آرژانتین": "ar", "پرتغال": "pt",
-    "ژاپن": "jp", "کره جنوبی": "kr", "کرواسی": "hr", "مراکش": "ma",
-    "سنگال": "sn", "هلند": "nl", "بلژیک": "be", "سوئیس": "ch",
-    "اروگوئه": "uy", "عربستان سعودی": "sa", "کانادا": "ca", "قطر": "qa",
-    "اکوادور": "ec", "ولز": "gb-wls", "استرالیا": "au", "تونس": "tn",
-    "لهستان": "pl", "دانمارک": "dk", "کاستاریکا": "cr", "صربستان": "rs",
-    "کامرون": "cm", "غنا": "gh"
+  if (!name) return "https://flagcdn.com/w80/un.png";
+  
+  // Normalize string for safety
+  const normalized = name.toLowerCase().replace(/\s+/g, "").trim();
+
+  // Primary dictionary mapping English ID / normalized names to flag code
+  const codeMap: { [key: string]: string } = {
+    mexico: "mx", southafrica: "za", korea: "kr", southkorea: "kr", czech: "cz", czechrepublic: "cz",
+    canada: "ca", bosnia: "ba", bosniaandherzegovina: "ba", qatar: "qa", switzerland: "ch",
+    brazil: "br", morocco: "ma", haiti: "ht", scotland: "gb-sct",
+    usa: "us", unitedstates: "us", paraguay: "py", australia: "au", turkey: "tr",
+    germany: "de", curacao: "cw", ivorycoast: "ci", ecuador: "ec",
+    netherlands: "nl", japan: "jp", sweden: "se", tunisia: "tn",
+    belgium: "be", egypt: "eg", iran: "ir", newzealand: "nz",
+    spain: "es", capeverde: "cv", saudi: "sa", saudiarabia: "sa", uruguay: "uy",
+    france: "fr", senegal: "sn", iraq: "iq", norway: "no",
+    argentina: "ar", algeria: "dz", austria: "at", jordan: "jo",
+    portugal: "pt", drcongo: "cd", uzbekistan: "uz", colombia: "co",
+    england: "gb", croatia: "hr", ghana: "gh", panama: "pa",
+    wales: "gb-wls", uae: "ae", unitedarabemirates: "ae", poland: "pl", denmark: "dk",
+    costarica: "cr", serbia: "rs", cameroon: "cm", italy: "it",
+    
+    // Persian mapping to codes
+    "مکزیک": "mx", "آفریقایجنوبی": "za", "کرهجنوبی": "kr", "چک": "cz",
+    "کانادا": "ca", "بوسنی": "ba", "قطر": "qa", "سوئیس": "ch",
+    "برزیل": "br", "مراکش": "ma", "هایتی": "ht", "اسکاتلند": "gb-sct",
+    "آمریکا": "us", "پاراگوئه": "py", "استرالیا": "au", "ترکیه": "tr",
+    "آلمان": "de", "کوراسائو": "cw", "ساحلعاج": "ci", "اکوادور": "ec",
+    "هلند": "nl", "ژاپن": "jp", "سوئد": "se", "تونس": "tn",
+    "بلژیک": "be", "مصر": "eg", "ایران": "ir", "نیوزیلند": "nz",
+    "اسپانیا": "es", "کیپورد": "cv", "عربستان": "sa", "عربستانسعودی": "sa", "اروگوئه": "uy", "اوروگوئه": "uy",
+    "فرانسه": "fr", "سنگال": "sn", "عراق": "iq", "نروژ": "no",
+    "آرژانتین": "ar", "الجزایر": "dz", "اتریش": "at", "اردن": "jo",
+    "پرتغال": "pt", "کنگو": "cd", "ازبکستان": "uz", "کلمبیا": "co",
+    "انگلستان": "gb", "کرواسی": "hr", "غنا": "gh", "پاناما": "pa",
+    "ولز": "gb-wls", "امارات": "ae", "لهستان": "pl", "دانمارک": "dk",
+    "کاستاریکا": "cr", "صربستان": "rs", "کامرون": "cm", "ایتالیا": "it"
   };
-  const code = flags[name] || "un";
+
+  const code = codeMap[normalized] || "un";
   return `https://flagcdn.com/w80/${code}.png`;
 };
 
@@ -1911,12 +1930,12 @@ function mergeManualResultsIntoLiveScores(liveScores: any[]): any[] {
       host: {
         name: item.teamA.name,
         nameEn: item.teamA.nameEn || item.teamA.id,
-        logo: item.teamA.flag || ""
+        logo: getFlagLogo(item.teamA.nameEn || item.teamA.name || item.teamA.id)
       },
       guest: {
         name: item.teamB.name,
         nameEn: item.teamB.nameEn || item.teamB.id,
-        logo: item.teamB.flag || ""
+        logo: getFlagLogo(item.teamB.nameEn || item.teamB.name || item.teamB.id)
       }
     };
   });

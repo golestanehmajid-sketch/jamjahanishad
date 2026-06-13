@@ -260,12 +260,18 @@ export const SoccerLiveTracker: React.FC<SoccerLiveTrackerProps> = ({
                                   <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
                                     <div className="w-10 h-10 rounded-full bg-slate-900 border border-white/5 flex items-center justify-center p-1.5 overflow-hidden">
                                       {scrapedMatch.host.logo ? (
-                                        <img
-                                          src={scrapedMatch.host.logo}
-                                          alt={scrapedMatch.host.name}
-                                          className="w-full h-full object-contain rounded"
-                                          referrerPolicy="no-referrer"
-                                        />
+                                        scrapedMatch.host.logo.startsWith("http") || scrapedMatch.host.logo.startsWith("/") ? (
+                                          <img
+                                            src={scrapedMatch.host.logo}
+                                            alt={scrapedMatch.host.name}
+                                            className="w-full h-full object-contain rounded"
+                                            referrerPolicy="no-referrer"
+                                          />
+                                        ) : (
+                                          <span className="text-xl select-none" role="img" aria-label={scrapedMatch.host.name}>
+                                            {scrapedMatch.host.logo}
+                                          </span>
+                                        )
                                       ) : (
                                         <span className="text-xs font-black text-slate-500">
                                           {scrapedMatch.host.name.substring(0, 2)}
@@ -297,12 +303,18 @@ export const SoccerLiveTracker: React.FC<SoccerLiveTrackerProps> = ({
                                   <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
                                     <div className="w-10 h-10 rounded-full bg-slate-900 border border-white/5 flex items-center justify-center p-1.5 overflow-hidden">
                                       {scrapedMatch.guest.logo ? (
-                                        <img
-                                          src={scrapedMatch.guest.logo}
-                                          alt={scrapedMatch.guest.name}
-                                          className="w-full h-full object-contain rounded"
-                                          referrerPolicy="no-referrer"
-                                        />
+                                        scrapedMatch.guest.logo.startsWith("http") || scrapedMatch.guest.logo.startsWith("/") ? (
+                                          <img
+                                            src={scrapedMatch.guest.logo}
+                                            alt={scrapedMatch.guest.name}
+                                            className="w-full h-full object-contain rounded"
+                                            referrerPolicy="no-referrer"
+                                          />
+                                        ) : (
+                                          <span className="text-xl select-none" role="img" aria-label={scrapedMatch.guest.name}>
+                                            {scrapedMatch.guest.logo}
+                                          </span>
+                                        )
                                       ) : (
                                         <span className="text-xs font-black text-slate-500">
                                           {scrapedMatch.guest.name.substring(0, 2)}
