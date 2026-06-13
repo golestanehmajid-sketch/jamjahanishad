@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { toPng } from "html-to-image";
 import { Team, Match, Group, GroupStanding, Achievement } from "./types";
-import { TEAMS, GROUPS, generateGroupMatches, ACHIEVEMENTS_DATA, getMatchDay, getMatchKickoffDate } from "./data";
+import { TEAMS, GROUPS, generateGroupMatches, ACHIEVEMENTS_DATA, getMatchDay, getMatchKickoffDate, getMatchTimePhase, getMatchDisplayStatus, reconcileMatchWithTime } from "./data";
 import { calculateStandings, simulateMatchScore, checkUnlockedAchievements } from "./utils";
 import { MatchRow } from "./components/MatchRow";
 import { GroupStandings } from "./components/GroupStandings";
@@ -617,12 +617,9 @@ export default function App() {
   // 4. ACTION HANDLERS
   // ----------------------------------------------------
   const handleScoreChange = (matchId: string, scoreA: number | null, scoreB: number | null) => {
-    // Prevent changing score if match has already started (live or official or chronologically past)
     const match = matches.find((m) => m.id === matchId);
     if (match) {
-      const kickoff = getMatchKickoffDate(matchId);
-      const isLocked = match.isLive || match.isOfficial || (new Date() >= kickoff);
-      if (isLocked) {
+      if (getMatchDisplayStatus(matchId, match).isLocked) {
         return;
       }
     }
@@ -639,10 +636,7 @@ export default function App() {
   const handleSimulateMatch = (matchId: string) => {
     const match = matches.find((m) => m.id === matchId);
     if (!match) return;
-    // Prevent simulation if match has already started (live or official or chronologically past)
-    const kickoff = getMatchKickoffDate(matchId);
-    const isLocked = match.isLive || match.isOfficial || (new Date() >= kickoff);
-    if (isLocked) return;
+    if (getMatchDisplayStatus(matchId, match).isLocked) return;
     
     const result = simulateMatchScore(match.teamA.strength, match.teamB.strength);
     handleScoreChange(matchId, result.scoreA, result.scoreB);
@@ -653,8 +647,8 @@ export default function App() {
     setMatches((prev) =>
       prev.map((m) => {
         if (m.group === groupId) {
-          // Do not overwrite live or official match predictions
-          if (m.isLive || m.isOfficial) return m;
+          const kickoff = getMatchKickoffDate(m.id);
+          if (m.isOfficial || getMatchTimePhase(kickoff).phase !== "scheduled") return m;
           const result = simulateMatchScore(m.teamA.strength, m.teamB.strength);
           return { ...m, scoreA: result.scoreA, scoreB: result.scoreB, userPredicted: true };
         }
@@ -668,8 +662,8 @@ export default function App() {
   const handleSimulateAllGroupMatches = () => {
     setMatches((prev) =>
       prev.map((m) => {
-        // Do not overwrite live or official match predictions
-        if (m.isLive || m.isOfficial) return m;
+        const kickoff = getMatchKickoffDate(m.id);
+        if (m.isOfficial || getMatchTimePhase(kickoff).phase !== "scheduled") return m;
         const result = simulateMatchScore(m.teamA.strength, m.teamB.strength);
         return { ...m, scoreA: result.scoreA, scoreB: result.scoreB, userPredicted: true };
       })
@@ -701,7 +695,42 @@ export default function App() {
   // ----------------------------------------------------
   const isLiveMode = true;
 
+  // Reconcile stale isLive/isOfficial flags against real kickoff times
   useEffect(() => {
+    const reconcileAll = () => {
+      setMatches((prev) => {
+        let changed = false;
+        const updated = prev.map((m) => {
+          const reconciled = reconcileMatchWithTime(m);
+          if (reconciled !== m) changed = true;
+          return reconciled;
+        });
+        return changed ? updated : prev;
+      });
+    };
+    reconcileAll();
+    const interval = setInterval(reconcileAll, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const parseScrapedMinute = (scraped: { minute?: number; statusTitle?: string }): number | null => {
+      if (scraped.minute != null && !Number.isNaN(Number(scraped.minute))) {
+        return Number(scraped.minute);
+      }
+      const title = scraped.statusTitle || "";
+      const persianMatch = title.match(/[۰-۹]+|\d+/);
+      if (persianMatch) {
+        const raw = persianMatch[0].replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)));
+        const parsed = parseInt(raw, 10);
+        if (!Number.isNaN(parsed)) return parsed;
+      }
+      return null;
+    };
+
+    const resolveLiveMinute = (scraped: { minute?: number; statusTitle?: string }, kickoff: Date): number => {
+      return parseScrapedMinute(scraped) ?? getMatchTimePhase(kickoff).minute ?? 1;
+    };
     // High-fidelity matching helper to pair static teams with scraped teams
     const matchTeamEn = (team: { name: string; nameEn: string }, scraped: { name: string; nameEn?: string }) => {
       if (!scraped) return false;
@@ -816,7 +845,7 @@ export default function App() {
                         ...m,
                         isOfficial: false,
                         isLive: true,
-                        minute: scraped.minute || 84,
+                        minute: resolveLiveMinute(scraped, kickoff),
                       };
                     } else if (scraped.status === 3 && (m.isLive || m.isOfficial)) {
                       changed = true;
@@ -847,7 +876,7 @@ export default function App() {
                       scoreB: goalsB !== null ? goalsB : m.scoreB,
                       isOfficial: false,
                       isLive: true,
-                      minute: scraped.minute || 84,
+                      minute: resolveLiveMinute(scraped, kickoff),
                     };
                   } else if (scraped.status === 3 && (m.isLive || m.isOfficial)) {
                     changed = true;

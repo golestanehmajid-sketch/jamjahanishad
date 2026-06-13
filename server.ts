@@ -1924,7 +1924,7 @@ function mergeManualResultsIntoLiveScores(liveScores: any[]): any[] {
       status: item.isOfficial ? 2 : item.isLive ? 1 : 3,
       statusTitle: item.isOfficial ? "پایان" : item.isLive ? "زنده" : "آینده",
       time: "ساعت بازی",
-      minute: item.minute || 84,
+      minute: item.minute != null ? item.minute : undefined,
       hostGoals: item.scoreA,
       guestGoals: item.scoreB,
       host: {
@@ -1995,7 +1995,7 @@ app.post("/api/manual-results", (req, res) => {
     scoreB: scoreB !== undefined && scoreB !== null ? Number(scoreB) : 0,
     isOfficial: !!isOfficial,
     isLive: !!isLive,
-    minute: minute !== undefined ? Number(minute) : 84,
+    minute: minute !== undefined ? Number(minute) : undefined,
     teamA,
     teamB,
     updatedAt: new Date().toISOString()

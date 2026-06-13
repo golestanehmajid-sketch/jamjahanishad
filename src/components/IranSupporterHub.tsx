@@ -6,7 +6,7 @@
 import React, { useState } from "react";
 import { Team, Match } from "../types";
 import { TeamFlag } from "./TeamFlag";
-import { getMatchKickoffDate } from "../data";
+import { getMatchDisplayStatus } from "../data";
 import { Heart, Sparkles, Volume2, Flame, Award, Zap, Plus, Minus, ChevronUp, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { trackUserAction } from "../utils/tracker";
@@ -281,9 +281,7 @@ export const IranSupporterHub: React.FC<IranSupporterHubProps> = ({
                     const iranScore = isTeamA_Iran ? m.scoreA : m.scoreB;
                     const oppScore = isTeamA_Iran ? m.scoreB : m.scoreA;
 
-                    const kickoff = getMatchKickoffDate(m.id);
-                    const isTimeLocked = new Date() >= kickoff;
-                    const isLocked = m.isLive || m.isOfficial || isTimeLocked;
+                    const isLocked = getMatchDisplayStatus(m.id, m).isLocked;
 
                     const handleAdjustIran = (diff: number) => {
                       if (isLocked) return;

@@ -8,7 +8,7 @@ import { Match, Team } from "../types";
 import { Dices, Plus, Minus, RotateCcw, X, Edit3 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { TeamFlag } from "./TeamFlag";
-import { getMatchKickoffDate } from "../data";
+import { getMatchKickoffDate, getMatchDisplayStatus } from "../data";
 
 interface MatchRowProps {
   match: Match;
@@ -18,13 +18,22 @@ interface MatchRowProps {
 }
 
 export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimulate, displayDay }) => {
-  const { teamA, teamB, scoreA, scoreB, id, isOfficial, isLive, minute } = match;
+  const { teamA, teamB, scoreA, scoreB, id } = match;
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [showSavedPulse, setShowSavedPulse] = useState(false);
+  const [now, setNow] = React.useState(() => new Date());
+
+  React.useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   const kickoff = getMatchKickoffDate(id);
-  const isTimeLocked = React.useMemo(() => new Date() >= kickoff, [kickoff]);
-  const isLocked = isOfficial || isLive || isTimeLocked;
+  const status = React.useMemo(
+    () => getMatchDisplayStatus(id, match, now),
+    [id, match, now]
+  );
+  const { isLocked, showOfficial, showLive, showFinished, showHalftime, minute } = status;
 
   const kickoffShamsiDate = React.useMemo(() => {
     try {
@@ -71,7 +80,7 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
   };
 
   const handleIncrement = (type: "A" | "B") => {
-    if (isOfficial || isLive) return;
+    if (isLocked) return;
     const currentA = scoreA === null ? 0 : scoreA;
     const currentB = scoreB === null ? 0 : scoreB;
     if (type === "A") {
@@ -83,7 +92,7 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
   };
 
   const handleDecrement = (type: "A" | "B") => {
-    if (isOfficial || isLive) return;
+    if (isLocked) return;
     const currentA = scoreA === null ? 0 : scoreA;
     const currentB = scoreB === null ? 0 : scoreB;
     if (type === "A") {
@@ -95,13 +104,13 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
   };
 
   const handleSimulate = () => {
-    if (isOfficial || isLive) return;
+    if (isLocked) return;
     onSimulate(id);
     setShowSavedPulse(true);
   };
 
   const handleClearScore = () => {
-    if (isOfficial || isLive) return;
+    if (isLocked) return;
     onScoreChange(id, null, null);
   };
 
@@ -115,9 +124,9 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -10 }}
         className={`relative bg-slate-900/80 backdrop-blur-md border rounded-2xl p-4 sm:p-5 flex flex-col items-stretch gap-4 transition-all duration-300 shadow-lg shadow-slate-950/45 ${
-          isOfficial 
+          showOfficial 
             ? "border-emerald-500/20 bg-gradient-to-br from-slate-900 via-emerald-950/5 to-slate-900" 
-            : isLive 
+            : showLive || showHalftime
             ? "border-red-500/30 bg-gradient-to-br from-slate-900 via-red-950/10 to-slate-900 shadow-red-950/10" 
             : showSavedPulse
             ? "border-emerald-500/80 bg-gradient-to-br from-slate-900 via-emerald-950/20 to-slate-900 shadow-emerald-500/30 ring-2 ring-emerald-500/20 animate-pulse duration-1000"
@@ -139,18 +148,22 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
 
           {/* Status indicator / live / official */}
           <div className="flex items-center gap-1.5">
-            {isLive ? (
-              <span className="flex items-center gap-1 bg-red-500/20 border border-red-500/30 text-[10px] text-red-400 font-bold px-2 py-0.5 rounded-full animate-pulse select-none font-mono">
-                <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping"></span>
-                زنده - دقیقه {toPersianDigits(minute || "۸۴")}'
-              </span>
-            ) : isOfficial ? (
+            {showOfficial ? (
               <span className="bg-emerald-500/15 border border-emerald-500/30 text-[10px] text-emerald-400 font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1 select-none">
                 🔒 نتیجه رسمی فیفا
               </span>
-            ) : isTimeLocked ? (
-              <span className="bg-slate-800/80 border border-white/5 text-[10px] text-slate-400 font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1 select-none font-sans">
-                🔒 شروع شد (پیش‌بینی قفل)
+            ) : showLive ? (
+              <span className="flex items-center gap-1 bg-red-500/20 border border-red-500/30 text-[10px] text-red-400 font-bold px-2 py-0.5 rounded-full animate-pulse select-none font-mono">
+                <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping"></span>
+                زنده - دقیقه {toPersianDigits(minute ?? 1)}'
+              </span>
+            ) : showHalftime ? (
+              <span className="flex items-center gap-1 bg-amber-500/20 border border-amber-500/30 text-[10px] text-amber-400 font-bold px-2 py-0.5 rounded-full select-none font-mono">
+                ⏸ استراحت بین دو نیمه
+              </span>
+            ) : showFinished ? (
+              <span className="bg-slate-700/80 border border-white/10 text-[10px] text-slate-300 font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1 select-none">
+                🏁 پایان بازی
               </span>
             ) : (
               <span className="text-[9.5px] text-slate-500 font-bold select-none">فاز مقدماتی گروهی</span>
@@ -188,11 +201,11 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
             {/* Score box display that users tap to edit score */}
             <div className="flex flex-col items-center justify-center bg-slate-900 border border-purple-500/25 px-5 py-3 rounded-xl shadow-inner select-none font-mono min-w-[76px] text-center ml-2.5">
               <div className="flex items-center gap-1.5 justify-center">
-                <span className={`text-xl font-extrabold ${isOfficial ? "text-emerald-400" : scorerColor(scoreA)}`}>
+                <span className={`text-xl font-extrabold ${showOfficial ? "text-emerald-400" : scorerColor(scoreA)}`}>
                   {scoreA !== null ? toPersianDigits(scoreA) : "—"}
                 </span>
                 <span className="text-slate-600 font-black">:</span>
-                <span className={`text-xl font-extrabold ${isOfficial ? "text-emerald-400" : scorerColor(scoreB)}`}>
+                <span className={`text-xl font-extrabold ${showOfficial ? "text-emerald-400" : scorerColor(scoreB)}`}>
                   {scoreB !== null ? toPersianDigits(scoreB) : "—"}
                 </span>
               </div>
@@ -245,7 +258,7 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
                 </button>
                 
                 <span className={`text-2xl sm:text-3xl font-black font-mono w-10 text-center select-none ${
-                  isOfficial 
+                  showOfficial 
                     ? "text-emerald-400 drop-shadow-[0_0_10px_rgba(16,185,129,0.3)]" 
                     : scorerColor(scoreA)
                 }`}>
@@ -278,7 +291,7 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
                 </button>
                 
                 <span className={`text-2xl sm:text-3xl font-black font-mono w-10 text-center select-none ${
-                  isOfficial 
+                  showOfficial 
                     ? "text-emerald-400 drop-shadow-[0_0_10px_rgba(16,185,129,0.3)]" 
                     : scorerColor(scoreB)
                 }`}>
@@ -419,7 +432,7 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
-                      disabled={isOfficial || isLive}
+                      disabled={isLocked}
                       onClick={() => handleDecrement("A")}
                       className="w-12 h-12 rounded-xl bg-slate-950 border border-white/10 text-slate-300 active:scale-95 flex items-center justify-center transition-all cursor-pointer select-none font-bold text-lg hover:border-red-500/20 disabled:opacity-20"
                     >
@@ -430,7 +443,7 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
                     </span>
                     <button
                       type="button"
-                      disabled={isOfficial || isLive}
+                      disabled={isLocked}
                       onClick={() => handleIncrement("A")}
                       className="w-12 h-12 rounded-xl bg-gradient-to-tr from-purple-600 to-pink-600 text-white active:scale-95 flex items-center justify-center transition-all cursor-pointer select-none font-bold text-lg shadow-md shadow-purple-900/20 disabled:opacity-20"
                     >
@@ -455,7 +468,7 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
-                      disabled={isOfficial || isLive}
+                      disabled={isLocked}
                       onClick={() => handleDecrement("B")}
                       className="w-12 h-12 rounded-xl bg-slate-950 border border-white/10 text-slate-300 active:scale-95 flex items-center justify-center transition-all cursor-pointer select-none font-bold text-lg hover:border-red-500/20 disabled:opacity-20"
                     >
@@ -466,7 +479,7 @@ export const MatchRow: React.FC<MatchRowProps> = ({ match, onScoreChange, onSimu
                     </span>
                     <button
                       type="button"
-                      disabled={isOfficial || isLive}
+                      disabled={isLocked}
                       onClick={() => handleIncrement("B")}
                       className="w-12 h-12 rounded-xl bg-gradient-to-tr from-purple-600 to-pink-600 text-white active:scale-95 flex items-center justify-center transition-all cursor-pointer select-none font-bold text-lg shadow-md shadow-purple-900/20 disabled:opacity-20"
                     >
