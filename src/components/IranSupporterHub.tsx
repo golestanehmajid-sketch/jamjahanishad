@@ -6,6 +6,7 @@
 import React, { useState } from "react";
 import { Team, Match } from "../types";
 import { TeamFlag } from "./TeamFlag";
+import { getMatchKickoffDate } from "../data";
 import { Heart, Sparkles, Volume2, Flame, Award, Zap, Plus, Minus, ChevronUp, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { trackUserAction } from "../utils/tracker";
@@ -280,8 +281,12 @@ export const IranSupporterHub: React.FC<IranSupporterHubProps> = ({
                     const iranScore = isTeamA_Iran ? m.scoreA : m.scoreB;
                     const oppScore = isTeamA_Iran ? m.scoreB : m.scoreA;
 
+                    const kickoff = getMatchKickoffDate(m.id);
+                    const isTimeLocked = new Date() >= kickoff;
+                    const isLocked = m.isLive || m.isOfficial || isTimeLocked;
+
                     const handleAdjustIran = (diff: number) => {
-                      if (m.isLive || m.isOfficial) return;
+                      if (isLocked) return;
                       const currentIran = iranScore !== null ? iranScore : 0;
                       const newVal = Math.min(9, Math.max(0, currentIran + diff));
                       if (isTeamA_Iran) {
@@ -292,7 +297,7 @@ export const IranSupporterHub: React.FC<IranSupporterHubProps> = ({
                     };
 
                     const handleAdjustOpp = (diff: number) => {
-                      if (m.isLive || m.isOfficial) return;
+                      if (isLocked) return;
                       const currentOpp = oppScore !== null ? oppScore : 0;
                       const newVal = Math.min(9, Math.max(0, currentOpp + diff));
                       if (isTeamA_Iran) {
@@ -312,9 +317,20 @@ export const IranSupporterHub: React.FC<IranSupporterHubProps> = ({
                           <span className="font-bold flex items-center gap-1 text-emerald-400">
                             <span>🦁 بازی {toFa(m.id.includes("1") || m.id.includes("newzealand") ? "اول" : m.id.includes("egypt") ? "دوم" : "سوم")} ایران در گروه G</span>
                           </span>
-                          <span className="font-bold text-[9.5px] text-slate-300 bg-slate-950/60 px-1.5 py-0.5 rounded border border-white/5">
-                            شانس برد ایران: %{toFa(winChance)}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            {isLocked ? (
+                              <span className="font-bold text-[9px] text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/20 flex items-center gap-1">
+                                🔒 قفل شده
+                              </span>
+                            ) : (
+                              <span className="font-bold text-[9px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                                ⏳ ثبت پیش‌بینی فرجه دارد
+                              </span>
+                            )}
+                            <span className="font-bold text-[9.5px] text-slate-300 bg-slate-950/60 px-1.5 py-0.5 rounded border border-white/5">
+                              شانس برد ایران: %{toFa(winChance)}
+                            </span>
+                          </div>
                         </div>
 
                         {/* Teams and Scores interactive layout */}
@@ -326,10 +342,10 @@ export const IranSupporterHub: React.FC<IranSupporterHubProps> = ({
                             <TeamFlag team={iranTeam} className="w-5 h-3.5 shadow-sm rounded-sm shrink-0" />
                             
                             {/* Controller for Iran */}
-                            <div className={`flex items-center bg-slate-950 px-1.5 py-0.5 rounded-md border border-emerald-500/30 gap-1.5 shrink-0 ${m.isLive || m.isOfficial ? "opacity-60" : ""}`}>
+                            <div className={`flex items-center bg-slate-950 px-1.5 py-0.5 rounded-md border border-emerald-500/30 gap-1.5 shrink-0 ${isLocked ? "opacity-60" : ""}`}>
                               <button
                                 type="button"
-                                disabled={m.isLive || m.isOfficial}
+                                disabled={isLocked}
                                 onClick={() => handleAdjustIran(-1)}
                                 className="w-4.5 h-4.5 rounded bg-slate-900 hover:bg-slate-850 text-slate-400 border border-white/5 flex items-center justify-center cursor-pointer active:scale-90 text-[9px] disabled:opacity-20 disabled:pointer-events-none"
                                 title="کاهش گل ایران"
@@ -341,7 +357,7 @@ export const IranSupporterHub: React.FC<IranSupporterHubProps> = ({
                               </span>
                               <button
                                 type="button"
-                                disabled={m.isLive || m.isOfficial}
+                                disabled={isLocked}
                                 onClick={() => handleAdjustIran(1)}
                                 className="w-4.5 h-4.5 rounded bg-slate-900 hover:bg-slate-850 text-slate-400 border border-white/5 flex items-center justify-center cursor-pointer active:scale-90 text-[9px] disabled:opacity-20 disabled:pointer-events-none"
                                 title="افزایش گل ایران"
@@ -362,10 +378,10 @@ export const IranSupporterHub: React.FC<IranSupporterHubProps> = ({
                             <TeamFlag team={opponent} className="w-5 h-3.5 shadow-sm rounded-sm shrink-0" />
 
                             {/* Controller for Opponent */}
-                            <div className={`flex items-center bg-slate-950 px-1.5 py-0.5 rounded-md border border-red-500/30 gap-1.5 shrink-0 ${m.isLive || m.isOfficial ? "opacity-60" : ""}`}>
+                            <div className={`flex items-center bg-slate-950 px-1.5 py-0.5 rounded-md border border-red-500/30 gap-1.5 shrink-0 ${isLocked ? "opacity-60" : ""}`}>
                               <button
                                 type="button"
-                                disabled={m.isLive || m.isOfficial}
+                                disabled={isLocked}
                                 onClick={() => handleAdjustOpp(-1)}
                                 className="w-4.5 h-4.5 rounded bg-slate-900 hover:bg-slate-850 text-slate-400 border border-white/5 flex items-center justify-center cursor-pointer active:scale-90 text-[9px] disabled:opacity-20 disabled:pointer-events-none"
                                 title={`کاهش گل ${opponent.name}`}
@@ -377,7 +393,7 @@ export const IranSupporterHub: React.FC<IranSupporterHubProps> = ({
                               </span>
                               <button
                                 type="button"
-                                disabled={m.isLive || m.isOfficial}
+                                disabled={isLocked}
                                 onClick={() => handleAdjustOpp(1)}
                                 className="w-4.5 h-4.5 rounded bg-slate-900 hover:bg-slate-850 text-slate-400 border border-white/5 flex items-center justify-center cursor-pointer active:scale-90 text-[9px] disabled:opacity-20 disabled:pointer-events-none"
                                 title={`افزایش گل ${opponent.name}`}

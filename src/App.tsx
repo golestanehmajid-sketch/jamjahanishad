@@ -780,6 +780,23 @@ export default function App() {
                 });
 
                 if (scraped) {
+                  // Chronological safety guard: If the match's kickoff time is in the future,
+                  // do not let the scraper mark it as Live (1) or Finished (2)!
+                  const kickoff = getMatchKickoffDate(m.id);
+                  const now = new Date();
+                  if (now < kickoff) {
+                    // Match has not started yet. Ensure it is reset to scheduled state if currently marked otherwise
+                    if (m.isLive || m.isOfficial) {
+                      changed = true;
+                      return {
+                        ...m,
+                        isLive: false,
+                        isOfficial: false
+                      };
+                    }
+                    return m;
+                  }
+
                   const isReversed = matchTeamEn(m.teamA, scraped.guest);
                   const goalsA = isReversed ? scraped.guestGoals : scraped.hostGoals;
                   const goalsB = isReversed ? scraped.hostGoals : scraped.guestGoals;
