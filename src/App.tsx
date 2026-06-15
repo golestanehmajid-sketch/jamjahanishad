@@ -1958,6 +1958,7 @@ export default function App() {
                   <div className="grid grid-cols-1 gap-4">
                     {matches
                       .filter((m) => getMatchDay(m.id) === selectedDay)
+                      .sort((a, b) => getMatchKickoffDate(a.id).getTime() - getMatchKickoffDate(b.id).getTime())
                       .map((m) => {
                         const isFavMatch = favoriteTeam && (m.teamA.id === favoriteTeam || m.teamB.id === favoriteTeam);
                         const hasNeonGold = activeEffects.gift_ball;
