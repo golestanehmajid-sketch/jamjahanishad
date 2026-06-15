@@ -416,38 +416,11 @@ export default function App() {
   const handlePredictTodayBtn = () => {
     trackUserAction("کلیک روی دکمه شناور پیش‌بینی سریع بازی امروز");
     
-    // 1. Search for live match in groups
-    const liveMatch = matches.find(m => m.isLive && !m.isKnockout);
-    if (liveMatch) {
-      const matchDay = getMatchDay(liveMatch.id);
-      setActiveTab("groups");
-      setMatchViewMode("daily");
-      setSelectedDay(matchDay);
-      showNotice(`🔥 شادکیوی عزیز، هدایت شدی به بازی زنده امروز (روز ${matchDay})!`);
-    } else {
-      // 2. Find first unpredicted group match
-      const unpredictedMatch = matches.find(m => !m.isKnockout && (m.scoreA === null || m.scoreB === null));
-      if (unpredictedMatch) {
-        const matchDay = getMatchDay(unpredictedMatch.id);
-        setActiveTab("groups");
-        setMatchViewMode("daily");
-        setSelectedDay(matchDay);
-        showNotice(`🎯 هدایت شدی به روز ${matchDay} برای پیش‌بینی اولین بازی خالی پیش‌رو!`);
-      } else {
-        // 3. Find first unpredicted knockout match
-        const unpredictedKnockout = matches.find(m => m.isKnockout && (m.scoreA === null || m.scoreB === null));
-        if (unpredictedKnockout) {
-          setActiveTab("knockout");
-          showNotice(`🏆 تمام بازی‌های گروهی پیش‌بینی شده‌اند! هدایت شدی به درخت حذفی.`);
-        } else {
-          // All done
-          setActiveTab("groups");
-          setMatchViewMode("daily");
-          setSelectedDay(1);
-          showNotice(`✨ آفرین قهرمان! تو تمام بازی‌های گروهی و حذفی رو پیش‌بینی کردی!`);
-        }
-      }
-    }
+    const todayDay = getInitialSelectedDay();
+    setActiveTab("groups");
+    setMatchViewMode("daily");
+    setSelectedDay(todayDay);
+    showNotice(`📅 انتقال به بازی‌های امروز؛ ${SHAMSI_DAYS[todayDay - 1] || `روز ${todayDay}`}`);
 
     setTimeout(() => {
       const container = document.getElementById("primary-view-container") || document.getElementById("navigation-tabs");
