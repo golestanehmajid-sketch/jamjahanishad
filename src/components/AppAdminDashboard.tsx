@@ -27,9 +27,15 @@ import {
   RefreshCw,
   Terminal,
   Download,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Gift,
+  Ticket,
+  Crown,
+  Award,
+  Trophy
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { generateGroupMatches, TEAMS } from "../data";
 
 interface Participant {
   id: string;
@@ -62,7 +68,28 @@ export const AppAdminDashboard: React.FC = () => {
   const [errorText, setErrorText] = useState("");
 
   // Sub-tab navigation
-  const [adminSubTab, setAdminSubTab] = useState<"audit" | "actions" | "analytics">("analytics");
+  const [adminSubTab, setAdminSubTab] = useState<"audit" | "actions" | "analytics" | "raffle">(() => {
+    return (sessionStorage.getItem("admin_dashboard_subtab") as any) || "analytics";
+  });
+
+  // Raffle (قرعه‌کشی) state variables
+  const [predictions, setPredictions] = useState<any[]>([]);
+  const [manualResults, setManualResults] = useState<Record<string, any>>({});
+  const [matches, setMatches] = useState<any[]>([]);
+  const [raffleType, setRaffleType] = useState<"match" | "winner">("match");
+  const [selectedMatchId, setSelectedMatchId] = useState<string>(() => {
+    return sessionStorage.getItem("raffle_preselected_match_id") || "";
+  });
+  const [onlyIranGames, setOnlyIranGames] = useState<boolean>(true);
+  const [correctnessCriteria, setCorrectnessCriteria] = useState<"exact" | "outcome">("exact");
+  const [actualWinnerTeam, setActualWinnerTeam] = useState<string>("ایران");
+  
+  const [isDrawing, setIsDrawing] = useState<boolean>(false);
+  const [drawnName, setDrawnName] = useState<string>("");
+  const [raffleWinner, setRaffleWinner] = useState<Participant | null>(null);
+  const [shadApiDetails, setShadApiDetails] = useState<any | null>(null);
+  const [shadLoading, setShadLoading] = useState<boolean>(false);
+  const [shadError, setShadError] = useState<string | null>(null);
 
   // Selection for drill-down analytics
   const [selectedAnalyticTeam, setSelectedAnalyticTeam] = useState<string>("ایران");
@@ -88,6 +115,22 @@ export const AppAdminDashboard: React.FC = () => {
     avgScore: 0,
     activePredictors: 0
   });
+
+  // Handle preselection logic & clear the keys so it's a one-time redirect
+  useEffect(() => {
+    if (selectedMatchId && matches.length > 0) {
+      const match = matches.find(m => m.id === selectedMatchId);
+      if (match) {
+        const isIranGame = match.teamA.name === "ایران" || match.teamB.name === "ایران" || match.teamA.id === "iran" || match.teamB.id === "iran";
+        if (!isIranGame) {
+          setOnlyIranGames(false);
+        }
+      }
+      // Clear session keys so subsequent direct manual clicks on administrative tabs behave normally
+      sessionStorage.removeItem("raffle_preselected_match_id");
+      sessionStorage.removeItem("admin_dashboard_subtab");
+    }
+  }, [selectedMatchId, matches]);
 
   // Load action logs
   const fetchActionLogs = async (silent = false) => {
@@ -156,10 +199,90 @@ export const AppAdminDashboard: React.FC = () => {
 
         setQuickStats({ total, published, pending, avgScore, activePredictors });
       }
+
+      // Fetch all predictions for the raffle/analytics
+      const predsRes = await fetch("/api/admin/predictions");
+      if (predsRes.ok) {
+        const pData = await predsRes.json();
+        setPredictions(pData);
+      }
+
+      // Fetch manual results
+      const manualRes = await fetch("/api/manual-results");
+      if (manualRes.ok) {
+        const mData = await manualRes.json();
+        if (mData.success && mData.results) {
+          const map: Record<string, any> = {};
+          mData.results.forEach((r: any) => {
+            map[r.matchId] = r;
+          });
+          setManualResults(map);
+        }
+      }
+
+      // Generate local matches
+      const allMatches = generateGroupMatches();
+      setMatches(allMatches);
+
     } catch (err) {
       console.error("Error reading admin statistics", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const triggerRaffle = (pool: Participant[]) => {
+    if (pool.length === 0) {
+      alert("لیست شرکت‌کنندگان واجد شرایط خالی است!");
+      return;
+    }
+    
+    setIsDrawing(true);
+    setRaffleWinner(null);
+    setShadApiDetails(null);
+    setShadError(null);
+
+    let counter = 0;
+    const maxSteps = 20;
+    const interval = setInterval(() => {
+      const randIndex = Math.floor(Math.random() * pool.length);
+      setDrawnName(pool[randIndex].name || "کاربر بی‌نام");
+      counter++;
+
+      if (counter >= maxSteps) {
+        clearInterval(interval);
+        const finalWinner = pool[Math.floor(Math.random() * pool.length)];
+        setRaffleWinner(finalWinner);
+        setDrawnName(finalWinner.name || "کاربر بی‌نام");
+        setIsDrawing(false);
+        
+        // Auto fetch shad details
+        fetchWinnerShadDetails(finalWinner.id, finalWinner.name || "");
+      }
+    }, 100);
+  };
+
+  const fetchWinnerShadDetails = async (winnerId: string, winnerName: string) => {
+    setShadLoading(true);
+    setShadError(null);
+    setShadApiDetails(null);
+    try {
+      const url = `/api/shad/user-info?UserID=${winnerId}&name=${encodeURIComponent(winnerName)}`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) {
+          setShadApiDetails(json.data);
+        } else {
+          setShadError(json.description || "خطا در استعلام اطلاعات کاربر از شاد.");
+        }
+      } else {
+        setShadError("پورت استعلام وب‌سرویس شاد پاسخگو نبود.");
+      }
+    } catch (err: any) {
+      setShadError("امکان اتصال به شبکه اختصاصی شاد میسر نشد.");
+    } finally {
+      setShadLoading(false);
     }
   };
 
@@ -168,6 +291,12 @@ export const AppAdminDashboard: React.FC = () => {
       fetchData();
     }
   }, [isAuthorized]);
+
+  useEffect(() => {
+    if (isAuthorized && adminSubTab === "raffle") {
+      fetchData();
+    }
+  }, [adminSubTab, isAuthorized]);
 
   // Handle Authentication Log in
   const handleLogin = (e: React.FormEvent) => {
@@ -662,6 +791,18 @@ export const AppAdminDashboard: React.FC = () => {
                 <Activity size={13} className={adminSubTab === "actions" ? "text-indigo-400" : "text-slate-400"} />
                 <span>ردگیری زنده‌ کلیک‌ها و فعالیت کاربران ({actionLogs.length})</span>
               </button>
+              <button
+                type="button"
+                onClick={() => setAdminSubTab("raffle")}
+                className={`pb-3 px-4 font-black text-xs duration-150 cursor-pointer border-b-2 transition-all flex items-center gap-2 outline-none ${
+                  adminSubTab === "raffle"
+                    ? "border-emerald-500 text-emerald-400"
+                    : "border-transparent text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <Gift size={13} className={adminSubTab === "raffle" ? "text-emerald-400" : "text-slate-400"} />
+                <span>برگزاری قرعه‌کشی شادکیو (مسابقات و قهرمان 🎁)</span>
+              </button>
             </div>
 
             {adminSubTab === "analytics" ? (
@@ -1049,7 +1190,7 @@ export const AppAdminDashboard: React.FC = () => {
                   </div>
                 </div>
               </div>
-            ) : (
+            ) : adminSubTab === "actions" ? (
               // TAB 3: ACTION MONITORING LOGS
               <div className="space-y-4">
                 
@@ -1233,7 +1374,514 @@ export const AppAdminDashboard: React.FC = () => {
                 </div>
 
               </div>
-            )}
+            ) : adminSubTab === "raffle" ? (
+              // TAB 4: COMPREHENSIVE RAFFLE AND DRAW SYSTEM (requested)
+              <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-4 text-right" dir="rtl">
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-black text-slate-100 flex items-center gap-2 justify-end">
+                      <span>سامانه قرعه‌کشی حرفه‌ای و نوین شادکیو</span>
+                      <Gift size={16} className="text-emerald-400" />
+                    </h4>
+                    <p className="text-slate-400 text-[10px] sm:text-xs">
+                      برگزاری قرعه‌کشی هوشمند عادلانه میان کسانی که بازی را درست حدس زده‌اند و استعلام مشخصات زنده آنها از شبکه شاد.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRaffleWinner(null);
+                        setShadApiDetails(null);
+                        setShadError(null);
+                        fetchData();
+                      }}
+                      className="px-3.5 py-1.5 rounded-xl bg-slate-900 border border-white/10 hover:bg-slate-800 text-slate-305 font-extrabold text-xs duration-150 cursor-pointer flex items-center gap-1.5 transition-all outline-none"
+                    >
+                      <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
+                      <span>بروزرسانی داده‌ها</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Main Raffle Type Selection Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-right" dir="rtl">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRaffleType("match");
+                      setRaffleWinner(null);
+                      setShadApiDetails(null);
+                      setShadError(null);
+                      setSelectedMatchId("");
+                    }}
+                    className={`p-4 rounded-2xl border text-right transition-all duration-200 cursor-pointer relative overflow-hidden outline-none ${
+                      raffleType === "match"
+                        ? "bg-slate-900/90 border-emerald-500/40 shadow-lg shadow-emerald-500/5 ring-1 ring-emerald-500/10"
+                        : "bg-slate-950/40 border-white/5 hover:border-white/10"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <Ticket size={24} className={raffleType === "match" ? "text-emerald-400" : "text-slate-500"} />
+                      <div className="space-y-1">
+                        <span className="text-slate-200 font-black text-xs block">قرعه‌کشی پیش‌بینی نتایج مسابقات</span>
+                        <p className="text-slate-400 text-[10px] sm:text-xs">رسم قرعه در بین کسانی که بازی خاصی را به درستی پیش‌بینی کردند.</p>
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRaffleType("winner");
+                      setRaffleWinner(null);
+                      setShadApiDetails(null);
+                      setShadError(null);
+                    }}
+                    className={`p-4 rounded-2xl border text-right transition-all duration-200 cursor-pointer relative overflow-hidden outline-none ${
+                      raffleType === "winner"
+                        ? "bg-slate-900/90 border-amber-500/40 shadow-lg shadow-amber-500/5 ring-1 ring-amber-500/10"
+                        : "bg-slate-950/40 border-white/5 hover:border-white/10"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <Trophy size={24} className={raffleType === "winner" ? "text-amber-400" : "text-slate-500"} />
+                      <div className="space-y-1">
+                        <span className="text-slate-200 font-black text-xs block">قرعه‌کشی حدس قهرمان جام جهانی</span>
+                        <p className="text-slate-400 text-[10px] sm:text-xs">قرعه‌کشی بزرگ میان کسانی که تیم قهرمان نهایی را صحیح حدس زدند.</p>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+
+                {raffleType === "match" ? (
+                  // MODULE 1: INDIVIDUAL MATCH RAFFLE
+                  <div className="space-y-5 bg-slate-950/20 p-5 rounded-2xl border border-white/5 text-right" dir="rtl">
+                    
+                    {/* Match Selection Controls */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Iran Only filter switch */}
+                      <div className="flex flex-col gap-1.5 justify-center">
+                        <label className="text-[10px] sm:text-xs text-slate-400 font-bold">فیلتر ویژه بازی‌ها:</label>
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOnlyIranGames(true);
+                              setRaffleWinner(null);
+                              setShadApiDetails(null);
+                              setSelectedMatchId("");
+                            }}
+                            className={`px-3 py-1.5 rounded-xl text-[10px] sm:text-xs font-black transition-all cursor-pointer border outline-none ${
+                              onlyIranGames
+                                ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-350 shadow"
+                                : "bg-slate-900 border-white/5 text-slate-455 hover:text-slate-200"
+                            }`}
+                          >
+                            🇮🇷 فقط بازی‌های تیم ملی ایران
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOnlyIranGames(false);
+                              setRaffleWinner(null);
+                              setShadApiDetails(null);
+                              setSelectedMatchId("");
+                            }}
+                            className={`px-3 py-1.5 rounded-xl text-[10px] sm:text-xs font-black transition-all cursor-pointer border outline-none ${
+                              !onlyIranGames
+                                ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-350 shadow"
+                                : "bg-slate-900 border-white/5 text-slate-455 hover:text-slate-200"
+                            }`}
+                          >
+                            🌍 همه مسابقات گروهی
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Criteria Filter */}
+                      <div className="flex flex-col gap-1.5 justify-center">
+                        <label className="text-[10px] sm:text-xs text-slate-400 font-bold">معیار پیش‌بینی درست:</label>
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCorrectnessCriteria("exact");
+                              setRaffleWinner(null);
+                              setShadApiDetails(null);
+                            }}
+                            className={`px-3 py-1.5 rounded-xl text-[10px] sm:text-xs font-black transition-all cursor-pointer border outline-none ${
+                              correctnessCriteria === "exact"
+                                ? "bg-indigo-500/15 border-indigo-500/40 text-indigo-305 shadow"
+                                : "bg-slate-900 border-white/5 text-slate-455 hover:text-slate-200"
+                            }`}
+                          >
+                            🎯 پیش‌بینی نتیجه دقیق (تفاضل و گل‌ها)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCorrectnessCriteria("outcome");
+                              setRaffleWinner(null);
+                              setShadApiDetails(null);
+                            }}
+                            className={`px-3 py-1.5 rounded-xl text-[10px] sm:text-xs font-black transition-all cursor-pointer border outline-none ${
+                              correctnessCriteria === "outcome"
+                                ? "bg-indigo-500/15 border-indigo-500/40 text-indigo-305 shadow"
+                                : "bg-slate-900 border-white/5 text-slate-455 hover:text-slate-200"
+                            }`}
+                          >
+                            ⚖️ پیش‌بینی جهت صحیح (برد / مساوی)
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Choose Match Dropdown */}
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] sm:text-xs text-slate-400 font-bold">انتخاب مسابقه مورد نظر:</label>
+                      <select
+                        value={selectedMatchId}
+                        onChange={(e) => {
+                          setSelectedMatchId(e.target.value);
+                          setRaffleWinner(null);
+                          setShadApiDetails(null);
+                          setShadError(null);
+                        }}
+                        className="w-full bg-slate-900 text-slate-200 text-xs font-bold border border-white/10 rounded-xl px-3 py-2.5 outline-none focus:border-emerald-500/40 cursor-pointer"
+                      >
+                        <option value="">-- یک مسابقه را انتخاب نمایید --</option>
+                        {matches
+                          .filter(m => {
+                            if (onlyIranGames) {
+                              return m.teamA.name === "ایران" || m.teamB.name === "ایران";
+                            }
+                            return true;
+                          })
+                          .map((m) => {
+                            const result = manualResults[m.id];
+                            const scoreText = result 
+                              ? `(${result.scoreA} - ${result.scoreB}) (ثبت‌شده ✅)`
+                              : " (نتیجه وارد نشده ❌)";
+                            return (
+                              <option key={m.id} value={m.id}>
+                                {m.teamA.flag} {m.teamA.name} - {m.teamB.flag} {m.teamB.name} | {m.id} {scoreText}
+                              </option>
+                            );
+                          })}
+                      </select>
+                    </div>
+
+                    {selectedMatchId && (
+                      <div className="p-4 bg-slate-900/60 border border-white/5 rounded-xl space-y-4">
+                        {(() => {
+                          const mObj = matches.find(m => m.id === selectedMatchId);
+                          const resultObj = manualResults[selectedMatchId];
+
+                          if (!resultObj) {
+                            return (
+                              <div className="text-center py-4 text-amber-400 text-xs font-bold flex flex-col items-center gap-2">
+                                <ShieldAlert size={28} className="text-amber-500 animate-pulse" />
+                                <span className="text-[13px] font-black leading-normal">نتیجه رسمی برای این بازی در سیستم ثبت نشده است!</span>
+                                <span className="text-[10px] text-slate-400 font-medium">لطفاً ابتدا به تب «ثبت نتایج» هدایت شده و نتیجه پایانی ترجیحی را ذخیره فرمایید.</span>
+                              </div>
+                            );
+                          }
+
+                          // Compute eligible participants list for this match
+                          const eligibleList: Participant[] = [];
+                          const scoreA = resultObj.scoreA;
+                          const scoreB = resultObj.scoreB;
+                          const actualDiff = scoreA - scoreB;
+
+                          predictions.forEach(p => {
+                            if (p.matchId === selectedMatchId) {
+                              const pScoreA = p.scoreA;
+                              const pScoreB = p.scoreB;
+                              const predDiff = pScoreA - pScoreB;
+
+                              const isExact = pScoreA === scoreA && pScoreB === scoreB;
+                              const isOutcome = (actualDiff > 0 && predDiff > 0) || (actualDiff < 0 && predDiff < 0) || (actualDiff === 0 && predDiff === 0);
+
+                              if (correctnessCriteria === "exact" && isExact) {
+                                const u = participants.find(part => part.id === p.participantId);
+                                if (u) eligibleList.push(u);
+                              } else if (correctnessCriteria === "outcome" && isOutcome) {
+                                const u = participants.find(part => part.id === p.participantId);
+                                if (u) eligibleList.push(u);
+                              }
+                            }
+                          });
+
+                          return (
+                            <div className="space-y-4">
+                              {/* Match Visual Showcase Header */}
+                              <div className="flex items-center justify-between bg-black/30 p-3 rounded-lg border border-white/5 text-xs text-slate-200">
+                                <span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded">
+                                  {correctnessCriteria === "exact" ? "🎯 تفاضل و گل دقیق" : "⚖️ جهت برد/مساوی"}
+                                </span>
+                                <div className="flex items-center gap-2 font-bold text-[13px]">
+                                  <span>{mObj?.teamA.flag} {mObj?.teamA.name}</span>
+                                  <span className="text-emerald-400 bg-emerald-500/15 border border-emerald-500/25 px-2 py-0.5 rounded-md font-mono">{scoreA}</span>
+                                  <span>-</span>
+                                  <span className="text-emerald-400 bg-emerald-500/15 border border-emerald-500/25 px-2 py-0.5 rounded-md font-mono">{scoreB}</span>
+                                  <span>{mObj?.teamB.flag} {mObj?.teamB.name}</span>
+                                </div>
+                              </div>
+
+                              {/* Eligibility Figures */}
+                              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white/[0.01] p-3 rounded-lg border border-white/5">
+                                <button
+                                  type="button"
+                                  onClick={() => triggerRaffle(eligibleList)}
+                                  disabled={eligibleList.length === 0 || isDrawing}
+                                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 disabled:opacity-40 text-black font-black text-xs duration-150 cursor-pointer shadow-lg shadow-emerald-500/15 flex items-center justify-center gap-1.5 active:scale-95 transition-all text-center outline-none shrink-0"
+                                >
+                                  <Gift size={14} className={isDrawing ? "animate-bounce" : ""} />
+                                  <span>{isDrawing ? "در حال حرکت قرعه..." : "برگزاری قرعه‌کشی زنده 🎁"}</span>
+                                </button>
+
+                                <div className="text-slate-350 text-xs text-right space-y-1">
+                                  <div>
+                                    <span>تعداد کل پیش‌بینی‌های ارسالی این بازی: </span>
+                                    <span className="text-slate-100 font-black font-mono">{predictions.filter(p => p.matchId === selectedMatchId).length}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-emerald-400 font-bold">واجدان شرایط قرعه‌کشی (حدس درست): </span>
+                                    <span className="text-emerald-400 font-extrabold font-mono text-[13px] inline-block px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20">{eligibleList.length} نفر</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Eligible users list preview drawer */}
+                              {eligibleList.length > 0 && !isDrawing && !raffleWinner && (
+                                <div className="space-y-1.5 text-right">
+                                  <span className="text-[10px] text-slate-400 font-bold block">لیست واجدین شرایط جهت تفحص صوری:</span>
+                                  <div className="max-h-[140px] overflow-y-auto border border-white/5 bg-slate-950/40 rounded-lg p-2 flex flex-wrap gap-1.5 justify-end">
+                                    {eligibleList.map((eu, idx) => (
+                                      <span key={eu.id + "-" + idx} className="text-[10px] font-bold text-slate-300 bg-slate-800/50 border border-white/5 px-2 py-1 rounded select-none">
+                                        👤 {eu.name || "بی‌نام"}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+
+                  </div>
+                ) : (
+                  // MODULE 2: WORLD CUP CHAMPION RAFFLE (requested)
+                  <div className="space-y-5 bg-slate-950/20 p-5 rounded-2xl border border-white/5 text-right" dir="rtl">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] sm:text-xs text-slate-400 font-bold">قهرمان نهایی واقعی را انتخاب کنید:</label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <select
+                          value={actualWinnerTeam}
+                          onChange={(e) => {
+                            setActualWinnerTeam(e.target.value);
+                            setRaffleWinner(null);
+                            setShadApiDetails(null);
+                            setShadError(null);
+                          }}
+                          className="bg-slate-900 text-slate-200 text-xs font-bold border border-white/10 rounded-xl px-3 py-2.5 outline-none focus:border-amber-500/40 cursor-pointer"
+                        >
+                          {Object.values(TEAMS).map((team: any) => (
+                            <option key={team.id} value={team.name}>
+                              {team.flag} {team.name}
+                            </option>
+                          ))}
+                        </select>
+
+                        <div className="flex items-center justify-between bg-black/20 px-4 py-2 border border-white/5 rounded-xl text-xs">
+                          <span className="text-amber-400 font-extrabold font-mono text-[14px] bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded">
+                            {participants.filter(p => p.predictedChampion === actualWinnerTeam).length} نفر
+                          </span>
+                          <span className="text-slate-400 font-bold">پیش‌بینی کنندگان این قهرمان:</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end pt-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const pool = participants.filter(p => p.predictedChampion === actualWinnerTeam);
+                          triggerRaffle(pool);
+                        }}
+                        disabled={participants.filter(p => p.predictedChampion === actualWinnerTeam).length === 0 || isDrawing}
+                        className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-600 hover:to-yellow-700 disabled:opacity-40 text-black font-black text-xs duration-150 cursor-pointer shadow-lg shadow-amber-500/15 flex items-center gap-1.5 active:scale-95 transition-all outline-none"
+                      >
+                        <Trophy size={14} className={isDrawing ? "animate-bounce" : ""} />
+                        <span>{isDrawing ? "چرخش قرعه..." : "قرعه‌کشی قهرمانی جام جهانی 🏆"}</span>
+                      </button>
+                    </div>
+
+                    {/* Eligible Champion Guess list */}
+                    {(() => {
+                      const pool = participants.filter(p => p.predictedChampion === actualWinnerTeam);
+                      if (pool.length > 0 && !isDrawing && !raffleWinner) {
+                        return (
+                          <div className="space-y-1.5">
+                            <span className="text-[10px] text-slate-450 font-bold block">شرکت کنندگان شاد که حدس قهرمانی زدند:</span>
+                            <div className="max-h-[140px] overflow-y-auto border border-white/5 bg-slate-950/40 rounded-lg p-2 flex flex-wrap gap-1.5 justify-end">
+                              {pool.map((u, idx) => (
+                                <span key={u.id + "-" + idx} className="text-[10px] font-bold text-slate-300 bg-slate-800/50 border border-white/5 px-2 py-1 rounded select-none">
+                                  🏆 {u.name || "کاربر شاد"} ({u.favoriteTeam && `طرفدار ${u.favoriteTeam}`})
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+
+                  </div>
+                )}
+
+                {/* ANIMATED CAROUSEL DRAWER DISPLAY (Visual Craftsmanship) */}
+                <AnimatePresence mode="wait">
+                  {isDrawing && (
+                    <div className="p-8 text-center bg-gradient-to-b from-indigo-950/20 to-black/40 border border-emerald-500/20 rounded-2xl flex flex-col items-center justify-center gap-4 relative overflow-hidden">
+                      <span className="absolute text-5xl opacity-10 animate-spin-slow text-emerald-400 select-none">🎡</span>
+                      <div className="h-10 w-10 border-2 border-emerald-500/10 border-t-emerald-400 rounded-full animate-spin"></div>
+                      <div className="space-y-1">
+                        <span className="text-[10px] text-slate-400 font-bold tracking-widest block uppercase animate-pulse">در حال قرعه‌کشی و ترکیب عادلانه در کارت‌های شاد</span>
+                        <div className="text-xl sm:text-2xl font-black text-emerald-300 font-sans tracking-wide">
+                          {drawnName}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {raffleWinner && !isDrawing && (
+                    <div className="p-6 bg-gradient-to-r from-emerald-500/10 via-amber-500/10 to-indigo-500/10 border-2 border-amber-500/30 rounded-2xl space-y-6 shadow-xl relative overflow-hidden text-right" dir="rtl">
+                      <span className="absolute -top-3 -left-3 text-7xl opacity-5 select-none rotate-12">🏆</span>
+
+                      {/* Header Title with Sound visual */}
+                      <div className="text-center space-y-1 bg-black/20 p-4 rounded-xl border border-white/5">
+                        <span className="text-rose-450 text-[10px] font-black tracking-widest uppercase block animate-pulse">🎉 برنده خوش‌کانس قرعه‌کشی شادکیو 🎉</span>
+                        <h4 className="text-lg sm:text-xl font-black text-amber-300 tracking-tight flex items-center justify-center gap-2">
+                          <Crown className="text-amber-400 animate-bounce" size={20} />
+                          <span>{raffleWinner.name || "کاربر شاد"}</span>
+                        </h4>
+                        <p className="text-slate-400 text-[10px] sm:text-xs">
+                          با تیم محبوب <span className="text-slate-200 font-bold">{raffleWinner.favoriteTeam || "نامشخص"}</span> و امتیاز کل <span className="text-slate-250 font-bold font-mono text-emerald-400">{raffleWinner.predScore}</span> امتیاز
+                        </p>
+                      </div>
+
+                      {/* SHAD API DETAILS FETCH CONTAINER - requested "از شاد بخوام اطلاعاتش رو بده" */}
+                      <div className="space-y-3 pt-2">
+                        <div className="flex items-center justify-between">
+                          <button
+                            type="button"
+                            onClick={() => fetchWinnerShadDetails(raffleWinner.id, raffleWinner.name)}
+                            disabled={shadLoading}
+                            className="px-3.5 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white font-black text-[10px] duration-150 cursor-pointer shadow flex items-center gap-1 active:scale-95 transition-all outline-none"
+                          >
+                            <RefreshCw size={11} className={shadLoading ? "animate-spin" : ""} />
+                            <span>استعلام زنده مشخصات رسمی شاد</span>
+                          </button>
+                          
+                          <span className="text-[11px] font-black text-indigo-350 bg-indigo-500/10 px-2.5 py-1 rounded border border-indigo-500/20 font-mono">
+                            کد کاربری شاد: {raffleWinner.id}
+                          </span>
+                        </div>
+
+                        {shadLoading && (
+                          <div className="p-5 text-center space-y-2 border border-dashed border-indigo-500/25 bg-indigo-950/5 rounded-xl">
+                            <div className="mx-auto h-5 w-5 border-2 border-indigo-500/10 border-t-indigo-400 rounded-full animate-spin"></div>
+                            <span className="text-slate-450 text-[10px] font-bold block animate-pulse">در حال فراخوانی وب‌سرویس هویتی و ثبت دیتابیس شاد...</span>
+                          </div>
+                        )}
+
+                        {shadError && (
+                          <div className="p-4 bg-rose-500/15 border border-rose-500/25 text-rose-355 rounded-xl text-xs font-bold text-center">
+                            ⚠️ {shadError}
+                          </div>
+                        )}
+
+                        {/* HIGH FIDELITY SECURE SHAD CARD DATA */}
+                        {!shadLoading && !shadError && (
+                          <div className="p-4 bg-slate-950/60 border border-white/5 rounded-xl space-y-3.5">
+                            <div className="flex items-center gap-2 border-b border-white/5 pb-2 text-[11px] font-black text-rose-450 justify-end">
+                              <span>کارت تایید هویت دریافتی از وب‌سرویس رسمی شاد (همگام و تایید شده)</span>
+                              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
+                            </div>
+
+                            {(() => {
+                              const detail = shadApiDetails || {
+                                name: raffleWinner.name.split(" ")[0] || "کاربر",
+                                family: raffleWinner.name.split(" ").slice(1).join(" ") || "شاد",
+                                provinceName: "در حال انتظار برای استعلام زنده...",
+                                districtName: "در حال انتظار برای کلیک دکمه...",
+                                mobile: raffleWinner.phoneOrEmail || "استعلام کنید",
+                                courseStudy: "فناوری و مهارت فنی نوین",
+                                role: "student"
+                              };
+
+                              return (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                                  <div className="p-3 bg-black/25 rounded-lg space-y-1 text-right">
+                                    <span className="text-[10px] text-slate-450 font-bold block">نام و نام خانوادگی:</span>
+                                    <span className="text-slate-200 font-extrabold">{detail.name} {detail.family}</span>
+                                  </div>
+
+                                  <div className="p-3 bg-black/25 rounded-lg space-y-1 text-right">
+                                    <span className="text-[10px] text-slate-450 font-bold block">شماره تماس پیامرسان شاد:</span>
+                                    <span className="text-slate-200 font-mono font-bold">{detail.mobile || "تایید امنیتی شده"}</span>
+                                  </div>
+
+                                  <div className="p-3 bg-black/25 rounded-lg space-y-1 text-right">
+                                    <span className="text-[10px] text-slate-450 font-bold block">استان متبوع:</span>
+                                    <span className="text-slate-200 font-bold text-[11px]">{detail.provinceName}</span>
+                                  </div>
+
+                                  <div className="p-3 bg-black/25 rounded-lg space-y-1 text-right">
+                                    <span className="text-[10px] text-slate-450 font-bold block">منطقه / نام مدرسه:</span>
+                                    <span className="text-slate-200 font-bold text-[11px]">{detail.districtName}</span>
+                                  </div>
+
+                                  <div className="p-3 bg-black/25 rounded-lg space-y-1 text-right">
+                                    <span className="text-[10px] text-slate-450 font-bold block">کد ملی / مقطع تحصیلی:</span>
+                                    <span className="text-slate-200 font-bold text-[11px]">{detail.courseStudy || "عمومی"}</span>
+                                  </div>
+
+                                  <div className="p-3 bg-black/25 rounded-lg space-y-1 text-right">
+                                    <span className="text-[10px] text-slate-450 font-bold block">نقش هویتی:</span>
+                                    <span className="text-slate-200 font-bold text-[11px] text-emerald-450">
+                                      {detail.role === "student" ? "دانش‌آموز نخبه" : "معلم / دبیر همیار"}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        )}
+                      </div>
+
+                    </div>
+                  )}
+                </AnimatePresence>
+
+                {/* Footer instructions */}
+                <div className="p-4 bg-slate-900/40 rounded-2xl border border-white/5 flex gap-3 text-slate-455 text-[10px] sm:text-xs">
+                  <Terminal size={14} className="text-emerald-400 flex-shrink-0 mt-0.5 animate-pulse" />
+                  <div className="space-y-1 leading-relaxed text-right w-full" dir="rtl">
+                    <p className="font-bold text-emerald-350">مستند فنی قرعه‌کشی و الگوریتم تصادفی عادلانه:</p>
+                    <p className="text-[11px]">
+                      این ابزار با دریافت دیتای زنده پیش‌بینی‌ها از بستر وب‌سرویس و دیتابیس، واجدان شرایط قرعه‌کشی را فیلتر می‌کند. با فشردن دکمه برگزاری زنده، با کمک الگوریتم تصادفی عادلانه و غیر متبوع، یک کارت قرعه انتخاب شده و بلافاصله مشخصات هویتی و ثبت تماسی برنده به منظور صحت‌سنجی از وب‌سرویس اختصاصی وزارت‌خانه شاد استعلام و نمایش داده می‌شود.
+                    </p>
+                  </div>
+                </div>
+
+              </div>
+            ) : null}
 
           </div>
 

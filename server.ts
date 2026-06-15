@@ -851,6 +851,15 @@ app.get("/api/participants", async (req, res) => {
   }
 });
 
+app.get("/api/admin/predictions", async (req, res) => {
+  try {
+    const list = await dbGetAllPredictions();
+    res.json(list);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post("/api/participants", async (req, res) => {
   try {
     const shadHashedId =
@@ -1612,140 +1621,186 @@ Do not include any other conversational text or surrounding markdown formatting.
   }
 }
 
+function translateGroupName(group: string): string {
+  if (!group) return "جام جهانی ۲۰۲۶ - جدول حذفی / عمومی";
+  return "جام جهانی ۲۰۲۶ - " + group.replace("Group", "گروه");
+}
+
+function mapApiFixturesToLeagues(fixtures: any[]): any[] {
+  const leaguesMap: Record<string, Record<string, any[]>> = {};
+
+  for (const f of fixtures) {
+    if (!f) continue;
+    const groupTitle = translateGroupName(f.group);
+    const dateLabel = f.schedule?.jalali?.label_fa || f.schedule?.gregorian?.label_fa || f.schedule?.local?.date || "امروز";
+
+    if (!leaguesMap[groupTitle]) {
+      leaguesMap[groupTitle] = {};
+    }
+    if (!leaguesMap[groupTitle][dateLabel]) {
+      leaguesMap[groupTitle][dateLabel] = [];
+    }
+
+    // Format the status
+    let status = 3; // Scheduled by default
+    let statusTitle = "شروع نشده";
+    const st = (f.status || "").toUpperCase();
+    if (st === "FT" || st === "AET" || st === "PEN" || st === "FINISHED") {
+      status = 2;
+      statusTitle = "پایان";
+    } else if (st === "NS" || st === "NOT_STARTED" || st === "TBD") {
+      status = 3;
+      statusTitle = "شروع نشده";
+    } else {
+      // Live matching
+      status = 1;
+      statusTitle = f.minute ? `دقیقه ${f.minute}` : "زنده";
+      if (st === "HT" || st === "HALF_TIME") {
+        statusTitle = "بین دو نیمه";
+      }
+    }
+
+    leaguesMap[groupTitle][dateLabel].push({
+      status,
+      statusTitle,
+      time: toPersianDigits(f.schedule?.local?.time_short || "۱۷:۰۰"),
+      hostGoals: typeof f.home?.score === 'number' ? f.home.score : null,
+      guestGoals: typeof f.away?.score === 'number' ? f.away.score : null,
+      host: {
+        name: f.home?.names?.fa || translateTeamName(f.home?.names?.en || "میزبان"),
+        nameEn: f.home?.names?.en || "Host",
+        logo: f.home?.badge || getFlagLogo(f.home?.names?.en || "")
+      },
+      guest: {
+        name: f.away?.names?.fa || translateTeamName(f.away?.names?.en || "میهمان"),
+        nameEn: f.away?.names?.en || "Guest",
+        logo: f.away?.badge || getFlagLogo(f.away?.names?.en || "")
+      }
+    });
+  }
+
+  const leaguesArray: any[] = [];
+  for (const [title, datesGroup] of Object.entries(leaguesMap)) {
+    const datesArray = Object.entries(datesGroup).map(([date, matches]) => ({
+      date,
+      matches
+    }));
+    leaguesArray.push({
+      title,
+      logo: "",
+      dates: datesArray
+    });
+  }
+
+  return leaguesArray;
+}
+
 app.get("/api/sports-hub/livescore", async (req, res) => {
   if (liveScoreCache && (Date.now() - liveScoreCache.timestamp < 30000)) { // 30 seconds cache for real-time fidelity
     return res.json({ success: true, source: "cached_memory", data: liveScoreCache.data });
   }
 
-  // Define fallback matches dynamically synced to current local Tehran time
-  const fallbackMatches = [
-    {
-      title: "جام جهانی ۲۰۲۶ - گروه A (آفلاین)",
-      logo: "",
-      dates: [
-        {
-          date: "امروز",
-          matches: [
-            {
-              status: 1,
-              statusTitle: "دقیقه ۷۲",
-              time: getIranTimeFormatted(-75), // kicked off 75 mins ago, naturally in second half minute 72
-              hostGoals: 2,
-              guestGoals: 1,
-              host: {
-                name: "ایران",
-                logo: "https://flagcdn.com/w80/ir.png",
-                nameEn: "Iran"
-              },
-              guest: {
-                name: "آمریکا",
-                logo: "https://flagcdn.com/w80/us.png",
-                nameEn: "USA"
-              }
-            },
-            {
-              status: 3,
-              statusTitle: "شروع نشده",
-              time: getIranTimeFormatted(120), // starts in 2 hours
-              hostGoals: null,
-              guestGoals: null,
-              host: {
-                name: "برزیل",
-                logo: "https://flagcdn.com/w80/br.png",
-                nameEn: "Brazil"
-              },
-              guest: {
-                name: "فرانسه",
-                logo: "https://flagcdn.com/w80/fr.png",
-                nameEn: "France"
-              }
-            }
-          ]
-        }
-      ]
-    },
-    {
-      title: "جام جهانی ۲۰۲۶ - گروه B (آفلاین)",
-      logo: "",
-      dates: [
-        {
-          date: "امروز",
-          matches: [
-            {
-              status: 2,
-              statusTitle: "پایان",
-              time: getIranTimeFormatted(-240), // kicked off 4 hours ago, now finished
-              hostGoals: 3,
-              guestGoals: 1,
-              host: {
-                name: "انگلستان",
-                logo: "https://flagcdn.com/w80/gb.png",
-                nameEn: "England"
-              },
-              guest: {
-                name: "ایتالیا",
-                logo: "https://flagcdn.com/w80/it.png",
-                nameEn: "Italy"
-              }
-            }
-          ]
-        }
-      ]
-    }
-  ];
+  const proxyUrl = "https://boon2api.emamrezaeeha.ir/test.php?u=https://mdeast.news/ar/wp-json/lsw/v1/partner?tz=Asia/Tehran%26key=7ca5TsCwS6rlDRUz9Ehb54De72I9Q5lx";
+  const directUrl = "https://mdeast.news/ar/wp-json/lsw/v1/partner?tz=Asia/Tehran&key=7ca5TsCwS6rlDRUz9Ehb54De72I9Q5lx";
+  
+  let rawJson: any = null;
+  let sourceUsed = "";
 
-  let mergedDataList: any[] = [];
-  let fetchedSources: string[] = [];
+  // 1. Try to fetch from proxyUrl first
+  try {
+    console.info("[Livescore Hub] Fetching live matches from proxy URL:", proxyUrl);
+    const apiRes = await fetch(proxyUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      }
+    });
+    if (apiRes.ok) {
+      const text = await apiRes.text();
+      // Validate we got JSON instead of 504 HTML error
+      if (text.trim().startsWith("{") || text.trim().startsWith("[")) {
+        rawJson = JSON.parse(text);
+        sourceUsed = "boon2api_proxy";
+        console.info("[Livescore Hub] Successfully loaded via proxy URL.");
+      }
+    }
+  } catch (err: any) {
+    console.warn("[Livescore Hub] Proxy fetch failed, attempting backup direct query:", err.message);
+  }
+
+  // 2. Fall back to direct mdeast.news URL if proxy failed or returned bad data
+  if (!rawJson) {
+    try {
+      console.info("[Livescore Hub] Fetching live matches from direct backup URL:", directUrl);
+      const apiRes = await fetch(directUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
+      });
+      if (apiRes.ok) {
+        const text = await apiRes.text();
+        if (text.trim().startsWith("{") || text.trim().startsWith("[")) {
+          rawJson = JSON.parse(text);
+          sourceUsed = "mdeast_news_direct";
+          console.info("[Livescore Hub] Successfully loaded via direct backup URL.");
+        }
+      }
+    } catch (err: any) {
+      console.error("[Livescore Hub] Direct fetch also failed:", err.message);
+    }
+  }
+
+  // 3. Fall back to on-disk offline backup file if both networks failed
+  const cacheFilePath = path.join(process.cwd(), "api_cache_backup.json");
+  if (rawJson) {
+    try {
+      fs.writeFileSync(cacheFilePath, JSON.stringify(rawJson, null, 2), "utf-8");
+      console.info("[Livescore Hub] Wrote response to local backup sync file.");
+    } catch (err: any) {
+      console.warn("[Livescore Hub] Failed to write cache backup:", err.message);
+    }
+  } else {
+    try {
+      if (fs.existsSync(cacheFilePath)) {
+        const fileContent = fs.readFileSync(cacheFilePath, "utf-8");
+        rawJson = JSON.parse(fileContent);
+        sourceUsed = "local_cache_backup";
+        console.info("[Livescore Hub] Successfully loaded matches from local disk cache fallback.");
+      }
+    } catch (err: any) {
+      console.error("[Livescore Hub] Local cache restore failed:", err.message);
+    }
+  }
+
+  if (!rawJson) {
+    return res.status(500).json({
+      success: false,
+      message: "امکان دریافت اطلاعات بازی‌ها از سرورهای مرکزی به علت قطعی موقت وجود ندارد."
+    });
+  }
 
   try {
-    // 1. Fetch search-grounded matches targeting scoreaxis & google uniquely
-    const googleResult = await getGoogleSearchLiveScores();
+    const fixtures = rawJson.fixtures || [];
+    let mappedLeagues = mapApiFixturesToLeagues(fixtures);
 
-    if (googleResult && googleResult.length > 0) {
-      fetchedSources.push("scoreaxis_and_google_grounding");
-
-      // Re-pack into the frontend's expected format (array of leagues with dates and matches)
-      mergedDataList = [
-        {
-          title: "جام جهانی ۲۰۲۶ - نتایج زنده (ScoreAxis & Google)",
-          logo: "",
-          dates: [
-            {
-              date: "امروز",
-              matches: googleResult
-            }
-          ]
-        }
-      ];
-
-      // Overlay manual results dynamically
-      mergedDataList = mergeManualResultsIntoLiveScores(mergedDataList);
-
-      liveScoreCache = {
-        timestamp: Date.now(),
-        data: mergedDataList
-      };
-
-      return res.json({ 
-        success: true, 
-        source: `consensual_aggregator (${fetchedSources.join(" + ")})`, 
-        data: mergedDataList 
-      });
-    }
-
-    throw new Error("ScoreAxis & Google grounding search returned no active matches");
-  } catch (err: any) {
-    console.info("[Livescore Hub] Real-time live score sync transitioned to high-fidelity preset schedules.");
-    
-    // 3. Fallback of High-Fidelity Pre-set World Cup 2026 data
-    let fallbackData = JSON.parse(JSON.stringify(fallbackMatches));
-    fallbackData = mergeManualResultsIntoLiveScores(fallbackData);
+    // Apply manual admin panel score overrides on top
+    mappedLeagues = mergeManualResultsIntoLiveScores(mappedLeagues);
 
     liveScoreCache = {
       timestamp: Date.now(),
-      data: fallbackData
+      data: mappedLeagues
     };
-    return res.json({ success: true, source: "fallback_preset", data: liveScoreCache.data });
+
+    return res.json({
+      success: true,
+      source: sourceUsed,
+      data: mappedLeagues
+    });
+  } catch (err: any) {
+    console.error("[Livescore Hub] Error processing fixtures payload:", err);
+    return res.json({
+      success: false,
+      message: "خطا در پردازش اطلاعات بازی‌ها: " + err.message
+    });
   }
 });
 

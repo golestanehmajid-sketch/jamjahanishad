@@ -32,12 +32,16 @@ interface ManualResult {
   updatedAt?: string;
 }
 
-export const ResultsAdminDashboard: React.FC = () => {
+export const ResultsAdminDashboard: React.FC<{ setActiveTab?: (tab: any) => void }> = ({ setActiveTab }) => {
   const [password, setPassword] = useState("");
   const [isAuthorized, setIsAuthorized] = useState<boolean>(() => {
     return sessionStorage.getItem("results_admin_auth") === "true";
   });
   const [errorText, setErrorText] = useState("");
+  
+  const [filterIranOnly, setFilterIranOnly] = useState<boolean>(false);
+  const [participants, setParticipants] = useState<any[]>([]);
+  const [predictions, setPredictions] = useState<any[]>([]);
   
   // Matches & Manual overrides state
   const [groupMatches, setGroupMatches] = useState<any[]>([]);
@@ -96,6 +100,22 @@ export const ResultsAdminDashboard: React.FC = () => {
           });
           setManualOverrideMap(map);
         }
+      }
+      
+      // 3. Fetch participants and predictions for raffle stats
+      try {
+        const pRes = await fetch("/api/participants");
+        if (pRes.ok) {
+          const pData = await pRes.json();
+          setParticipants(pData);
+        }
+        const predRes = await fetch("/api/admin/predictions");
+        if (predRes.ok) {
+          const predData = await predRes.json();
+          setPredictions(predData);
+        }
+      } catch (err) {
+        console.warn("Unable to fetch participants/predictions for results dashboard raffle statistics:", err);
       }
       
       setInputScores(initialInputs);
@@ -319,9 +339,15 @@ export const ResultsAdminDashboard: React.FC = () => {
       if (filterOverrideStatus === "manual" && !hasOverride) return false;
       if (filterOverrideStatus === "not_entered" && hasOverride) return false;
 
+      // 5. Special Iran National Team filter
+      if (filterIranOnly) {
+        const isIranGame = m.teamA.name === "ایران" || m.teamB.name === "ایران" || m.teamA.id === "iran" || m.teamB.id === "iran";
+        if (!isIranGame) return false;
+      }
+
       return true;
     });
-  }, [groupMatches, manualOverrideMap, searchTerm, filterRound, filterGroup, filterOverrideStatus]);
+  }, [groupMatches, manualOverrideMap, searchTerm, filterRound, filterGroup, filterOverrideStatus, filterIranOnly]);
 
   if (!isAuthorized) {
     return (
@@ -467,6 +493,29 @@ export const ResultsAdminDashboard: React.FC = () => {
 
         {/* Search & Filters Controls Box */}
         <div className="bg-slate-900 border border-white/10 rounded-2xl p-4 space-y-4">
+          
+          {/* Smart Iran Team Filter Row */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-950/40 p-3 rounded-xl border border-emerald-500/10">
+            <div className="flex flex-col text-right w-full sm:w-auto">
+              <span className="text-xs font-black text-emerald-400 Persian-font">فیلتر هوشمند شادکیو 🇮🇷</span>
+              <span className="text-[10px] text-slate-400 mt-0.5 leading-relaxed Persian-font">مشاهدۀ اختصاصی بازی‌های ایران، تعداد پیش‌بینی‌های صحیح و انتقال مستقیم به قرعه‌کشی شاد</span>
+            </div>
+            
+            <button
+              type="button"
+              onClick={() => setFilterIranOnly(prev => !prev)}
+              className={`w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer border outline-none flex items-center justify-center gap-2 ${
+                filterIranOnly
+                  ? "bg-emerald-500/20 border-emerald-500/55 text-emerald-350 shadow-md shadow-emerald-500/10 ring-1 ring-emerald-500/20 animate-pulse"
+                  : "bg-slate-900 border-white/5 text-slate-400 hover:text-white"
+              }`}
+            >
+              <span className="text-[14px]">🇮🇷</span>
+              <span className="Persian-font">نمایش فقط بازی‌های تیم ملی ایران ({groupMatches.filter(m => m.teamA.name === "ایران" || m.teamB.name === "ایران").length} بازی)</span>
+              {filterIranOnly && <span className="w-2 h-2 rounded-full bg-emerald-400" />}
+            </button>
+          </div>
+
           <div className="flex flex-col md:flex-row gap-3">
             {/* Search Input */}
             <div className="relative flex-1">
@@ -481,13 +530,14 @@ export const ResultsAdminDashboard: React.FC = () => {
             </div>
 
             {/* Quick Actions / Reset search helper */}
-            {(searchTerm || filterRound !== "all" || filterGroup !== "all" || filterOverrideStatus !== "all") && (
+            {(searchTerm || filterRound !== "all" || filterGroup !== "all" || filterOverrideStatus !== "all" || filterIranOnly) && (
               <button
                 onClick={() => {
                   setSearchTerm("");
                   setFilterRound("all");
                   setFilterGroup("all");
                   setFilterOverrideStatus("all");
+                  setFilterIranOnly(false);
                 }}
                 className="h-11 px-4 bg-slate-800 text-slate-300 text-xs font-bold rounded-xl border border-white/5 hover:bg-slate-700 transition-colors cursor-pointer Persian-font"
               >
@@ -770,6 +820,73 @@ export const ResultsAdminDashboard: React.FC = () => {
                     )}
 
                   </div>
+
+                  {/* Participant Prediction Stats and Direct Raffle Switch button */}
+                  {(() => {
+                    // Calculate statistics for this match
+                    const matchPredictions = predictions.filter((p: any) => p.matchId === m.id);
+                    const totalPredictionsCount = matchPredictions.length;
+
+                    // Extract actual score
+                    const actScoreA = override ? override.scoreA : (m.isOfficial ? m.scoreA : null);
+                    const actScoreB = override ? override.scoreB : (m.isOfficial ? m.scoreB : null);
+
+                    let exactMatchWinners = 0;
+                    let outcomeMatchWinners = 0;
+
+                    if (actScoreA !== null && actScoreB !== null) {
+                      const actualDiff = actScoreA - actScoreB;
+                      matchPredictions.forEach((p: any) => {
+                        const pScoreA = p.scoreA;
+                        const pScoreB = p.scoreB;
+                        if (typeof pScoreA === "number" && typeof pScoreB === "number") {
+                          const predDiff = pScoreA - pScoreB;
+                          const isExactVal = pScoreA === actScoreA && pScoreB === actScoreB;
+                          const isOutcomeVal = (actualDiff > 0 && predDiff > 0) || (actualDiff < 0 && predDiff < 0) || (actualDiff === 0 && predDiff === 0);
+
+                          if (isExactVal) exactMatchWinners++;
+                          if (isOutcomeVal) outcomeMatchWinners++;
+                        }
+                      });
+                    }
+
+                    return (
+                      <div className="bg-slate-950/45 p-3 rounded-xl border border-white/5 space-y-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-slate-400 font-bold Persian-font">پیش‌بینی‌های ثبت شده کاربران:</span>
+                          <span className="font-mono text-cyan-400 font-black">{toPersianDigits(totalPredictionsCount)} پیش‌بینی</span>
+                        </div>
+
+                        {actScoreA !== null && actScoreB !== null && (
+                          <div className="space-y-1 pt-1.5 border-t border-white/5 text-[11px]">
+                            <div className="flex items-center justify-between text-emerald-400 font-bold">
+                              <span className="Persian-font">برندگان حدس دقیق نتیجه ({toPersianDigits(actScoreA)}-{toPersianDigits(actScoreB)}):</span>
+                              <span className="font-mono bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">{toPersianDigits(exactMatchWinners)} نفر</span>
+                            </div>
+                            <div className="flex items-center justify-between text-indigo-400 font-bold">
+                              <span className="Persian-font">برندگان حدس جهت بازی (برد/مساوی):</span>
+                              <span className="font-mono bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/20">{toPersianDigits(outcomeMatchWinners)} نفر</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {setActiveTab && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              sessionStorage.setItem("raffle_preselected_match_id", m.id);
+                              sessionStorage.setItem("admin_dashboard_subtab", "raffle");
+                              setActiveTab("adminDashboard");
+                              window.scrollTo({ top: 0, behavior: "smooth" });
+                            }}
+                            className="w-full h-8 mt-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-350 border border-emerald-500/25 active:scale-95 duration-100 rounded-lg text-[10.5px] font-black cursor-pointer flex items-center justify-center gap-1.5 transition-all outline-none Persian-font"
+                          >
+                            <span>ورود مستقیم به قرعه‌کشی این مسابقه 🎁🎡</span>
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Actions Bar Footer on Card */}
                   <div className="flex items-center gap-2 pt-1 border-t border-white/5 text-xs">
