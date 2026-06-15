@@ -120,6 +120,42 @@ const hexToRgb = (hex: string): string => {
     : "236, 72, 153"; // default to pink
 };
 
+export const SHAMSI_DAYS = [
+  "۲۱ خرداد",
+  "۲۲ خرداد",
+  "۲۳ خرداد",
+  "۲۴ خرداد",
+  "۲۵ خرداد",
+  "۲۶ خرداد",
+  "۲۷ خرداد",
+  "۲۸ خرداد",
+  "۲۹ خرداد",
+  "۳۰ خرداد",
+  "۳۱ خرداد",
+  "۱ تیر",
+  "۲ تیر",
+  "۳ تیر",
+  "۴ تیر",
+  "۵ تیر",
+  "۶ تیر",
+  "۷ تیر"
+];
+
+// Helper to determine starting match day from today's real date (June 2026) dynamically
+export const getInitialSelectedDay = (): number => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth(); // June is 5
+  const date = now.getDate();
+
+  if (year === 2026 && month === 5) {
+    if (date <= 11) return 1;
+    if (date >= 28) return 18;
+    return date - 10; // June 11 -> 1, June 12 -> 2, June 13 -> 3, etc.
+  }
+  return 5; // Defaults to match day 5 (Today, June 15, 2026 / 25 Khordad)
+};
+
 export default function App() {
   // ----------------------------------------------------
   // 1. STATES
@@ -318,7 +354,7 @@ export default function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [selectedGroupFilter, setSelectedGroupFilter] = useState<string>("A");
   const [matchViewMode, setMatchViewMode] = useState<"daily" | "groups">("daily");
-  const [selectedDay, setSelectedDay] = useState<number>(1);
+  const [selectedDay, setSelectedDay] = useState<number>(getInitialSelectedDay());
   
   // Simulation alert details
   const [simulationNotice, setSimulationNotice] = useState<string | null>(null);
@@ -1809,69 +1845,59 @@ export default function App() {
                           className="relative z-10 px-5 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-650 hover:to-purple-750 text-white font-black text-xs shadow-lg shadow-pink-500/10 transition-all cursor-pointer outline-none border border-white/10 flex items-center gap-1.5 hover:scale-103 duration-150"
                         >
                           <Sparkles size={13} className="text-amber-400 animate-spin" />
-                          <span>انتخاب قهرمان طلایی جام</span>
+                          <span>انتخاب قهرمان طلایی</span>
                         </button>
                       </motion.div>
                     )}
                   </div>
-
                 </div>
               </div>
 
-              {/* 🔄 Unified Compact View Switcher Header */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-900/30 border border-white/5 p-4 rounded-2xl" dir="rtl">
-                <div className="flex items-center gap-2 text-right select-none">
-                  <span className="w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-pink-500 via-purple-600 to-indigo-600 animate-pulse"></span>
-                  <p className="text-xs sm:text-sm font-black text-slate-200 font-sans Persian-font">
-                    {matchViewMode === "daily" 
-                      ? "پیش‌بینی سریع روزانه" 
-                      : "پیش‌بینی کل گروه‌ها و جدول رده‌بندی زنده"
-                    }
-                  </p>
-                </div>
-
-                <div className="flex items-center bg-slate-950/80 border border-white/10 p-1 rounded-xl shadow-inner font-sans shrink-0 max-w-full overflow-hidden">
+              {/* Toggle Selector for matches sub-views */}
+              <div className="flex items-center justify-between border-b border-white/5 pb-2 mt-4" dir="rtl">
+                <div className="flex items-center gap-1.5 p-1 bg-slate-950/65 rounded-xl border border-white/5 font-bold">
                   <button
-                    type="button"
                     onClick={() => setMatchViewMode("daily")}
-                    className={`px-4 py-2 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 focus:outline-none select-none ${
+                    className={`px-3.5 py-2 rounded-lg text-xs font-black transition-all cursor-pointer ${
                       matchViewMode === "daily"
-                        ? "bg-gradient-to-r from-pink-500 via-purple-600 to-indigo-600 text-white shadow-lg font-black"
-                        : "text-slate-400 hover:text-white"
+                        ? "bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-md shadow-pink-500/10"
+                        : "text-slate-400 hover:text-slate-200"
                     }`}
                   >
-                    <Calendar size={13} />
-                    <span>برنامه روزانه</span>
+                    📅 نمای روزانه بازی‌ها
                   </button>
                   <button
-                    type="button"
                     onClick={() => setMatchViewMode("groups")}
-                    className={`px-4 py-2 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 focus:outline-none select-none ${
+                    className={`px-3.5 py-2 rounded-lg text-xs font-black transition-all cursor-pointer ${
                       matchViewMode === "groups"
-                        ? "bg-gradient-to-r from-pink-500 via-purple-600 to-indigo-600 text-white shadow-lg font-black"
-                        : "text-slate-400 hover:text-white"
+                        ? "bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-md shadow-pink-500/10"
+                        : "text-slate-400 hover:text-slate-200"
                     }`}
                   >
-                    <Trophy size={13} />
-                    <span>جدول گروه‌ها</span>
+                    🗂️ نمای تفکیکی گروه‌ها (A-L)
                   </button>
+                </div>
+                <div>
+                  <span className="text-[11px] text-slate-400 font-bold hidden sm:inline Persian-font">
+                    شیوه فیلتر مسابقات بر اساس سلیقه شما
+                  </span>
                 </div>
               </div>
 
-              {/* BRANCH 1: DAILY MATCHES (Focused, Mobile-friendly, Day-by-Day scroll) */}
               {matchViewMode === "daily" && (
-                <div id="daily-predictor-section" className="space-y-5 animate-fade-in text-right" dir="rtl">
-                  <div className="bg-slate-950/60 p-4 rounded-2xl border border-white/5 space-y-3">
-                    <span className="text-[10px] bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 font-extrabold px-2.5 py-1 rounded-md block w-fit Persian-font select-none">
+                <div id="daily-matches-view" className="space-y-6 animate-fade-in" dir="rtl">
+                  {/* Selector of Match Days */}
+                  <div className="bg-slate-900/15 p-4 rounded-2xl border border-white/5">
+                    <span className="text-[10px] text-pink-400 font-extrabold tracking-wider uppercase block mb-1">
                       فیلتر روزانه مرحله گروهی ⚡
                     </span>
                     <h4 className="text-xs sm:text-sm font-bold text-slate-300 leading-relaxed Persian-font">
-                      مرحله گروهی جام جهانی شامل ۷۲ بازی پرهیجان است.
+                      مرحله گروهی جام جهانی شامل ۷۲ بازی پرهیجان با تاریخ‌های شمسی تفکیک شده است.
                     </h4>
 
-                    {/* Horizontal scrollable slider of 12 Match Days */}
+                    {/* Horizontal scrollable slider of Match Days */}
                     <div className="flex items-center gap-1.5 overflow-x-auto pb-2 pt-1 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
-                      {Array.from({ length: 12 }).map((_, i) => {
+                      {Array.from({ length: SHAMSI_DAYS.length }).map((_, i) => {
                         const dayNum = i + 1;
                         const isSelected = selectedDay === dayNum;
                         return (
@@ -1885,7 +1911,7 @@ export default function App() {
                                 : "bg-slate-900 border border-white/5 text-slate-400 hover:bg-slate-850 hover:text-white"
                             }`}
                           >
-                            روز {String(dayNum).replace(/[0-9]/g, c => "۰۱۲۳۴۵۶۷۸۹"[+c])}
+                            {SHAMSI_DAYS[dayNum - 1] || `روز ${dayNum}`}
                           </button>
                         );
                       })}
@@ -1898,7 +1924,7 @@ export default function App() {
                       <div className="flex items-center gap-2">
                         <span className="w-2.5 h-2.5 bg-rose-500 rounded-full animate-pulse shrink-0"></span>
                         <h4 className="text-sm font-black text-rose-400 Persian-font">
-                          دیدارهای روز {String(selectedDay).replace(/[0-9]/g, c => "۰۱۲۳۴۵۶۷۸۹"[+c])} مقدماتی گروهی
+                          دیدارهای {SHAMSI_DAYS[selectedDay - 1] || `روز ${selectedDay}`} مقدماتی گروهی
                         </h4>
                       </div>
                       <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
@@ -1914,15 +1940,15 @@ export default function App() {
                           const dayMatches = matches.filter(m => getMatchDay(m.id) === selectedDay);
                           dayMatches.forEach(m => handleSimulateMatch(m.id));
                           if (typeof showNotice === "function") {
-                            showNotice(`🎲 تمام بازی‌های روز ${String(selectedDay).replace(/[0-9]/g, c => "۰۱۲۳۴۵۶۷۸۹"[+c])} با تکیه بر الگوریتم‌های قدرت شبیه‌سازی شدند!`);
+                            showNotice(`🎲 تمام بازی‌های ${SHAMSI_DAYS[selectedDay - 1] || `روز ${selectedDay}`} با تکیه بر الگوریتم‌های قدرت شبیه‌سازی شدند!`);
                           } else {
-                            setSimulationNotice(`🎲 تمام بازی‌های روز ${String(selectedDay).replace(/[0-9]/g, c => "۰۱۲۳۴۵۶۷۸۹"[+c])} شبیه‌سازی شدند!`);
+                            setSimulationNotice(`🎲 تمام بازی‌های ${SHAMSI_DAYS[selectedDay - 1] || `روز ${selectedDay}`} شبیه‌سازی شدند!`);
                           }
                         }}
                         className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-pink-500/10 hover:bg-pink-500/20 text-pink-400 border border-pink-500/25 text-xs font-black duration-150 cursor-pointer active:scale-95 transition-all focus:outline-none"
                       >
                         <Dices size={13} />
-                        <span>شبیه‌سازی هوشمند بازی‌های روز {String(selectedDay).replace(/[0-9]/g, c => "۰۱۲۳۴۵۶۷۸۹"[+c])}</span>
+                        <span>شبیه‌سازی هوشمند بازی‌های {SHAMSI_DAYS[selectedDay - 1] || `روز ${selectedDay}`}</span>
                       </button>
 
                       <button
@@ -1932,9 +1958,9 @@ export default function App() {
                           const dayMatches = matches.filter(m => getMatchDay(m.id) === selectedDay);
                           dayMatches.forEach(m => handleScoreChange(m.id, null, null));
                           if (typeof showNotice === "function") {
-                            showNotice(`🔄 پیش‌بینی‌های روز ${String(selectedDay).replace(/[0-9]/g, c => "۰۱۲۳۴۵۶۷۸۹"[+c])} با موفقیت پاک شدند.`);
+                            showNotice(`🔄 پیش‌بینی‌های ${SHAMSI_DAYS[selectedDay - 1] || `روز ${selectedDay}`} با موفقیت پاک شدند.`);
                           } else {
-                            setSimulationNotice(`🔄 پیش‌بینی‌های روز ${String(selectedDay).replace(/[0-9]/g, c => "۰۱۲۳۴۵۶۷۸۹"[+c])} حذف شدند.`);
+                            setSimulationNotice(`🔄 پیش‌بینی‌های ${SHAMSI_DAYS[selectedDay - 1] || `روز ${selectedDay}`} حذف شدند.`);
                           }
                         }}
                         className="p-2.5 rounded-xl bg-slate-900 text-slate-400 hover:bg-red-500/20 hover:border-red-500/30 hover:text-red-400 border border-white/5 duration-150 cursor-pointer focus:outline-none transition-all"
