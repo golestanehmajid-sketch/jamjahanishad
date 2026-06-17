@@ -236,17 +236,31 @@ export async function initDb() {
   if (!pool) {
     try {
       ensureDataDir();
-      if (!fs.existsSync(PARTICIPANTS_FILE)) {
+      if (!fs.existsSync(PARTICIPANTS_FILE) || fs.readFileSync(PARTICIPANTS_FILE, "utf-8").trim() === "[]") {
         fs.writeFileSync(PARTICIPANTS_FILE, "[]", "utf-8");
       }
       if (!fs.existsSync(ACTION_LOGS_FILE)) {
         fs.writeFileSync(ACTION_LOGS_FILE, "[]", "utf-8");
       }
-      if (!fs.existsSync(PREDICTIONS_FILE)) {
+      if (!fs.existsSync(PREDICTIONS_FILE) || fs.readFileSync(PREDICTIONS_FILE, "utf-8").trim() === "{}") {
         fs.writeFileSync(PREDICTIONS_FILE, "{}", "utf-8");
       }
       isDbInitialized = true;
       console.log("❇️ Local file storage initialized successfully.");
+
+      // Run auto-seeders for high fidelity demonstrative experience
+      try {
+        const partsContent = fs.readFileSync(PARTICIPANTS_FILE, "utf-8").trim();
+        const predsContent = fs.readFileSync(PREDICTIONS_FILE, "utf-8").trim();
+        if (partsContent === "[]") {
+          await seedDefaultMockParticipants();
+        }
+        if (predsContent === "{}") {
+          await seedDefaultMockPredictions();
+        }
+      } catch (seedErr) {
+        console.error("Error running auto-seeders:", seedErr);
+      }
     } catch (err) {
       console.error("❌ Failed to initialize local file storage:", err);
     }
@@ -514,6 +528,9 @@ export async function dbBulkSaveParticipants(newList: Participant[]): Promise<bo
   }
 
   fs.writeFileSync(PARTICIPANTS_FILE, JSON.stringify(newList, null, 2), "utf-8");
+  if (newList.some((p) => p.id === "p-s1")) {
+    await seedDefaultMockPredictions();
+  }
   return true;
 }
 
@@ -714,5 +731,104 @@ export async function dbGetAllPredictions(): Promise<any[]> {
   }
 
   return [];
+}
+
+export async function seedDefaultMockParticipants() {
+  const samples: Participant[] = [
+    { id: "p-s1", name: "امیر قلعه‌نویی", favoriteTeam: "ایران", predictedChampion: "برزیل", predScore: 88, status: "completed", phoneOrEmail: "ghalenoei@teammelli.ir", isPublished: true, registeredAt: "۱۴۰۵/۰۳/۱۸", predictionsCount: 48 },
+    { id: "p-s2", name: "پیمان یوسفی", favoriteTeam: "انگلستان", predictedChampion: "فرانسه", predScore: 62, status: "completed", phoneOrEmail: "yousefi@irib.ir", isPublished: true, registeredAt: "۱۴۰۵/۰۳/۱۹", predictionsCount: 48 },
+    { id: "p-s3", name: "سردار آزمون", favoriteTeam: "ایران", predictedChampion: "آلمان", predScore: 92, status: "completed", phoneOrEmail: "sardar@roma.it", isPublished: true, registeredAt: "۱۴۰۵/۰۳/۱۹", predictionsCount: 48 }
+  ];
+  if (pool) {
+    try {
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query("DELETE FROM participants");
+        for (const p of samples) {
+          await client.query(
+            `
+            INSERT INTO participants (${PARTICIPANT_COLUMNS})
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+            `,
+            participantToRow(p)
+          );
+        }
+        await client.query("COMMIT");
+      } catch (err) {
+        await client.query("ROLLBACK");
+        console.error("PG Seed participants failed:", err);
+      } finally {
+        client.release();
+      }
+    } catch (_) {}
+  }
+  ensureDataDir();
+  fs.writeFileSync(PARTICIPANTS_FILE, JSON.stringify(samples, null, 2), "utf-8");
+}
+
+export async function seedDefaultMockPredictions() {
+  const groups = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"];
+  const participants = ["p-s1", "p-s2", "p-s3"];
+  
+  const mockData: Record<string, any[]> = {};
+  
+  participants.forEach((partId, pIdx) => {
+    const list: any[] = [];
+    groups.forEach(gId => {
+      for (let mIdx = 1; mIdx <= 6; mIdx++) {
+        const matchId = `G-${gId}-${mIdx}`;
+        // Generate deterministic, typical scores based on user index
+        let scoreA = 1;
+        let scoreB = 0;
+        if (pIdx === 0) {
+          scoreA = mIdx % 2 === 0 ? 2 : 1;
+          scoreB = mIdx % 3 === 0 ? 1 : 0;
+        } else if (pIdx === 1) {
+          scoreA = mIdx % 2 === 0 ? 1 : 2;
+          scoreB = mIdx % 2 === 0 ? 1 : 2; // high draw probability
+        } else if (pIdx === 2) {
+          scoreA = mIdx % 3 === 0 ? 3 : 2;
+          scoreB = mIdx % 3 === 0 ? 0 : 1;
+        }
+        list.push({
+          matchId,
+          scoreA,
+          scoreB,
+          winnerId: null,
+          updatedAt: new Date().toISOString()
+        });
+      }
+    });
+    mockData[partId] = list;
+  });
+
+  if (pool) {
+    try {
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        for (const [partId, preds] of Object.entries(mockData)) {
+          for (const p of preds) {
+            const id = `${partId}_${p.matchId}`;
+            await client.query(`
+              INSERT INTO predictions (id, participant_id, match_id, score_a, score_b, winner_id, updated_at)
+              VALUES ($1, $2, $3, $4, $5, $6, $7)
+              ON CONFLICT (id) DO NOTHING
+            `, [id, partId, p.matchId, p.scoreA, p.scoreB, p.winnerId, p.updatedAt]);
+          }
+        }
+        await client.query("COMMIT");
+      } catch (err) {
+        await client.query("ROLLBACK");
+        console.error("PG Seed failed:", err);
+      } finally {
+        client.release();
+      }
+    } catch (_) {}
+  }
+
+  ensureDataDir();
+  fs.writeFileSync(PREDICTIONS_FILE, JSON.stringify(mockData, null, 2), "utf-8");
 }
 

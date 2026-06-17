@@ -16,11 +16,17 @@ import {
   CheckCircle2,
   Tv,
   Trash2,
-  Clock
+  Clock,
+  ChevronDown,
+  ChevronUp,
+  Award,
+  Users,
+  CheckCircle
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { generateGroupMatches, TEAMS, GROUPS, getMatchKickoffDate, getMatchDay } from "../data";
 import { TeamFlag } from "./TeamFlag";
+import { calculateMatchPoints } from "../utils/scoring";
 
 interface ManualResult {
   matchId: string;
@@ -55,6 +61,13 @@ export const ResultsAdminDashboard: React.FC<{ setActiveTab?: (tab: any) => void
   const [filterRound, setFilterRound] = useState<string>("all"); // "all", "1", "2", "3"
   const [filterGroup, setFilterGroup] = useState<string>("all"); // "all", "A", "B", etc.
   const [filterOverrideStatus, setFilterOverrideStatus] = useState<string>("all"); // "all", "manual", "not_entered"
+
+  // Tabs & Predictions Stats state variables
+  const [activeSubTab, setActiveSubTab] = useState<"results" | "predictions-stats">("results");
+  const [statsSearchTerm, setStatsSearchTerm] = useState("");
+  const [statsSortBy, setStatsSortBy] = useState<"points" | "exact" | "correct" | "predictions">("points");
+  const [statsFavoriteTeam, setStatsFavoriteTeam] = useState("all");
+  const [expandedUsers, setExpandedUsers] = useState<Record<string, boolean>>({});
 
   // Quick results input states for each match (temporary state for form inputs)
   const [inputScores, setInputScores] = useState<Record<string, { scoreA: number; scoreB: number; isOfficial: boolean; isLive: boolean; minute: number }>>({});
@@ -349,6 +362,80 @@ export const ResultsAdminDashboard: React.FC<{ setActiveTab?: (tab: any) => void
     }).sort((a, b) => getMatchKickoffDate(a.id).getTime() - getMatchKickoffDate(b.id).getTime());
   }, [groupMatches, manualOverrideMap, searchTerm, filterRound, filterGroup, filterOverrideStatus, filterIranOnly]);
 
+  // Compute detailed statistics per user
+  const userStatsList = useMemo(() => {
+    return participants.map(user => {
+      const userPreds = predictions.filter(p => p.participantId === user.id);
+      
+      let exactCount = 0;
+      let outcomeCount = 0;
+      let totalPointsComputed = 0;
+      
+      userPreds.forEach(pred => {
+        const actual = manualOverrideMap[pred.matchId];
+        if (actual && actual.isOfficial) {
+          const score = calculateMatchPoints(
+            { scoreA: Number(pred.scoreA), scoreB: Number(pred.scoreB) },
+            { scoreA: Number(actual.scoreA), scoreB: Number(actual.scoreB) },
+            !pred.matchId.startsWith("G-")
+          );
+          
+          if (score > 0) {
+            const isKnockout = !pred.matchId.startsWith("G-");
+            const exactScoreVal = isKnockout ? 7 : 5;
+            if (score === exactScoreVal) {
+              exactCount++;
+            } else {
+              outcomeCount++;
+            }
+            totalPointsComputed += score;
+          }
+        }
+      });
+
+      const totalCorrect = exactCount + outcomeCount;
+      const accuracy = userPreds.length > 0 ? Math.round((totalCorrect / userPreds.length) * 100) : 0;
+
+      return {
+        ...user,
+        exactCount,
+        outcomeCount,
+        totalCorrect,
+        accuracy,
+        totalPointsComputed,
+        predictions: userPreds
+      };
+    });
+  }, [participants, predictions, manualOverrideMap]);
+
+  // Filter and sort stats based on selection
+  const filteredAndSortedStats = useMemo(() => {
+    return userStatsList.filter(user => {
+      const text = `${user.name} ${user.phoneOrEmail || ""} ${user.favoriteTeam || ""}`.toLowerCase();
+      if (statsSearchTerm && !text.includes(statsSearchTerm.toLowerCase())) {
+        return false;
+      }
+      if (statsFavoriteTeam !== "all" && user.favoriteTeam !== statsFavoriteTeam) {
+        return false;
+      }
+      return true;
+    }).sort((a, b) => {
+      if (statsSortBy === "points") {
+        return b.predScore - a.predScore;
+      }
+      if (statsSortBy === "exact") {
+        return b.exactCount - a.exactCount;
+      }
+      if (statsSortBy === "correct") {
+        return b.totalCorrect - a.totalCorrect;
+      }
+      if (statsSortBy === "predictions") {
+        return (b.predictionsCount || 0) - (a.predictionsCount || 0);
+      }
+      return 0;
+    });
+  }, [userStatsList, statsSearchTerm, statsFavoriteTeam, statsSortBy]);
+
   if (!isAuthorized) {
     return (
       <div className="min-h-[80vh] flex items-center justify-center p-4 py-12" dir="rtl">
@@ -465,8 +552,38 @@ export const ResultsAdminDashboard: React.FC<{ setActiveTab?: (tab: any) => void
           </div>
         </div>
 
-        {/* Dynamic Analytics Stats cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {/* Tab Selection Bar */}
+        <div className="flex border-b border-white/10 gap-2 select-none Persian-font">
+          <button
+            onClick={() => setActiveSubTab("results")}
+            className={`pb-3 px-4 text-xs sm:text-sm font-black transition-all ${
+              activeSubTab === "results"
+                ? "border-b-2 border-purple-500 text-purple-400 font-extrabold"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            📋 ثبت و ویرایش نتایج زنده/نهایی
+          </button>
+          <button
+            onClick={() => setActiveSubTab("predictions-stats")}
+            className={`pb-3 px-4 text-xs sm:text-sm font-black transition-all relative ${
+              activeSubTab === "predictions-stats"
+                ? "border-b-2 border-purple-500 text-purple-400 font-extrabold"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            📊 آمار دقیق پیش‌بینی‌های کاربران
+            <span className="absolute -top-1 -left-1 flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500"></span>
+            </span>
+          </button>
+        </div>
+
+        {activeSubTab === "results" ? (
+          <>
+            {/* Dynamic Analytics Stats cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="bg-slate-900 border border-white/5 p-4 rounded-2xl select-none">
             <div className="text-[11px] font-bold text-slate-500 Persian-font">کل مسابقات گروهی</div>
             <div className="text-2xl font-black text-slate-100 mt-1.5 font-mono">{toPersianDigits(72)}</div>
@@ -922,6 +1039,281 @@ export const ResultsAdminDashboard: React.FC<{ setActiveTab?: (tab: any) => void
                 </div>
               );
             })}
+          </div>
+        )}
+          </>
+        ) : (
+          /* predictions-stats rendering */
+          <div className="space-y-6">
+            {/* Stats Summary cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="bg-slate-900 border border-white/5 p-4 rounded-2xl select-none">
+                <div className="text-[11px] font-bold text-slate-500 Persian-font">تعداد شرکت‌کنندگان</div>
+                <div className="text-2xl font-black text-slate-100 mt-1.5 font-mono">{toPersianDigits(participants.length)} نفر</div>
+              </div>
+              <div className="bg-slate-900 border border-purple-500/10 p-4 rounded-2xl select-none">
+                <div className="text-[11px] font-bold text-purple-400 Persian-font">کل پیش‌بینی‌های ثبت‌شده</div>
+                <div className="text-2xl font-black text-purple-300 mt-1.5 font-mono">
+                  {toPersianDigits(predictions.length)} پیش‌بینی
+                </div>
+              </div>
+              <div className="bg-slate-900 border border-emerald-500/10 p-4 rounded-2xl select-none">
+                <div className="text-[11px] font-bold text-emerald-400 Persian-font">بازی‌های خاتمه یافته رسمی</div>
+                <div className="text-2xl font-black text-emerald-300 mt-1.5 font-mono">
+                  {toPersianDigits(Object.values(manualOverrideMap).filter((x: any) => x.isOfficial).length)} مسابقه
+                </div>
+              </div>
+              <div className="bg-slate-900 border border-amber-500/10 p-4 rounded-2xl select-none">
+                <div className="text-[11px] font-bold text-amber-400 Persian-font">میانگین امتیاز کل</div>
+                <div className="text-2xl font-black text-amber-300 mt-1.5 font-mono">
+                  {toPersianDigits(participants.length > 0 ? Math.round(participants.reduce((acc, curr) => acc + (curr.predScore || 0), 0) / participants.length) : 0)} امتیاز
+                </div>
+              </div>
+            </div>
+
+            {/* Smart search & sorting controls */}
+            <div className="bg-slate-900 border border-white/10 rounded-2xl p-4 space-y-4">
+              <div className="flex flex-col md:flex-row gap-3">
+                {/* Search Term */}
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={statsSearchTerm}
+                    onChange={(e) => setStatsSearchTerm(e.target.value)}
+                    placeholder="جستجوی نام کاربر، ایمیل/موبایل یا تیم محبوب..."
+                    className="w-full h-11 bg-slate-950 border border-white/10 rounded-xl pr-10 pl-4 text-xs font-bold text-slate-200 outline-none focus:border-purple-500 transition-all text-right Persian-font"
+                  />
+                  <Search className="absolute right-3.5 top-3.5 text-slate-500" size={15} />
+                </div>
+
+                {/* Favorite Team Filter */}
+                <div className="space-y-1.5 text-right w-full md:w-56">
+                  <select
+                    value={statsFavoriteTeam}
+                    onChange={(e) => setStatsFavoriteTeam(e.target.value)}
+                    className="w-full h-11 bg-slate-950 border border-white/10 rounded-xl px-3 text-xs font-bold text-slate-300 outline-none Persian-font border-r-8 border-transparent"
+                  >
+                    <option value="all">فیلتر بر اساس تیم محبوب (همه)</option>
+                    {Array.from(new Set(participants.map(p => p.favoriteTeam).filter(Boolean))).map((t: any) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Sort Preference Selector */}
+                <div className="space-y-1.5 text-right w-full md:w-56">
+                  <select
+                    value={statsSortBy}
+                    onChange={(e) => setStatsSortBy(e.target.value as any)}
+                    className="w-full h-11 bg-slate-950 border border-white/10 rounded-xl px-3 text-xs font-bold text-slate-300 outline-none Persian-font border-r-8 border-transparent"
+                  >
+                    <option value="points">مرتب‌سازی: امتیاز کل (پیش‌فرض)</option>
+                    <option value="correct">مرتب‌سازی: مجموع پیش‌بینی‌های درست</option>
+                    <option value="exact">مرتب‌سازی: تعداد حدس تفاضل/نتیجه دقیق</option>
+                    <option value="predictions">مرتب‌سازی: بیشترین پیش‌بینی ارسالی</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* User leaderboard stats listing */}
+            <div className="space-y-3">
+              {filteredAndSortedStats.length === 0 ? (
+                <div className="bg-slate-900 border border-white/5 rounded-2xl p-12 text-center text-slate-500">
+                  <Users className="mx-auto text-slate-700 mb-3" size={40} />
+                  <p className="text-sm font-bold Persian-font">هیچ کاربری با مشخصات وارد شده یافت نشد!</p>
+                </div>
+              ) : (
+                filteredAndSortedStats.map((u, index) => {
+                  const isExpanded = !!expandedUsers[u.id];
+                  const settledMatchesCount = Object.values(manualOverrideMap).filter((x: any) => x.isOfficial).length;
+
+                  return (
+                    <div 
+                      key={u.id}
+                      className="bg-slate-900/60 border border-white/10 rounded-2xl overflow-hidden transition-all duration-300"
+                    >
+                      {/* Main user summary row */}
+                      <div className="p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div className="flex items-center gap-3 text-right w-full sm:w-auto">
+                          {/* Rank number badge */}
+                          <div className="w-8 h-8 rounded-full bg-slate-950 flex items-center justify-center font-mono text-xs font-bold text-slate-400 shrink-0 border border-white/5">
+                            {toPersianDigits(index + 1)}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-extrabold text-slate-100 text-sm Persian-font">{u.name}</span>
+                              {u.favoriteTeam && (
+                                <span className="bg-slate-950/80 px-2 py-0.5 rounded-full text-[10px] text-slate-400 font-bold border border-white/5 Persian-font">
+                                  تیم محبوب: {u.favoriteTeam}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-xs text-slate-500 font-mono block mt-0.5">{u.phoneOrEmail || "بدون مشخصه تماس"}</span>
+                          </div>
+                        </div>
+
+                        {/* Mid statistics counters */}
+                        <div className="grid grid-cols-4 gap-2 sm:gap-4 w-full sm:w-auto text-center">
+                          <div className="bg-slate-950/40 p-2 rounded-xl border border-white/5 min-w-[70px]">
+                            <span className="block text-[9px] text-slate-500 font-bold Persian-font">پیش‌بینی ثبت‌شده</span>
+                            <span className="text-xs font-black font-mono text-cyan-400 mt-0.5 block">
+                              {toPersianDigits(u.predictionsCount || u.predictions.length)} / {toPersianDigits(48)}
+                            </span>
+                          </div>
+                          <div className="bg-slate-950/40 p-2 rounded-xl border border-white/5 min-w-[70px]">
+                            <span className="block text-[9px] text-slate-500 font-bold Persian-font">حدس دقیق</span>
+                            <span className="text-xs font-black font-mono text-emerald-400 mt-0.5 block">
+                              {toPersianDigits(u.exactCount)}
+                            </span>
+                          </div>
+                          <div className="bg-slate-950/40 p-2 rounded-xl border border-white/5 min-w-[70px]">
+                            <span className="block text-[9px] text-slate-500 font-bold Persian-font">حدس جهت درست</span>
+                            <span className="text-xs font-black font-mono text-indigo-400 mt-0.5 block">
+                              {toPersianDigits(u.outcomeCount)}
+                            </span>
+                          </div>
+                          <div className="bg-slate-950/40 p-2 rounded-xl border border-white/5 min-w-[70px]">
+                            <span className="block text-[9px] text-slate-500 font-bold Persian-font">امتیاز جدول</span>
+                            <span className="text-xs font-black font-mono text-amber-400 mt-0.5 block">
+                              {toPersianDigits(u.predScore)} pt
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Expand actions */}
+                        <div className="flex gap-2 w-full sm:w-auto shrink-0 justify-end">
+                          <button
+                            type="button"
+                            onClick={() => toggleUserExpanded(u.id)}
+                            className={`flex items-center gap-1.5 h-9 px-3.5 rounded-xl text-xs font-bold cursor-pointer transition-all ${
+                              isExpanded 
+                                ? "bg-purple-500/20 text-purple-400 border border-purple-500/30"
+                                : "bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/5"
+                            }`}
+                          >
+                            <span>{isExpanded ? "بستن ریز پیش‌بینی‌ها" : "عملکرد و برگه پیش‌بینی"}</span>
+                            {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Collapsible Expanded predictions breakdown */}
+                      <AnimatePresence>
+                        {isExpanded && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            className="bg-slate-950/50 border-t border-white/10 p-4 sm:p-5 space-y-3 font-sans"
+                          >
+                            <div className="flex items-center justify-between pb-2 border-b border-white/5">
+                              <h4 className="text-xs font-black text-slate-300 Persian-font flex items-center gap-1.5">
+                                <Award size={14} className="text-purple-400" />
+                                <span>برگه پیش‌بینی کارشناسی شده {u.name} (بر اساس بازی‌هایی پایان‌یافته):</span>
+                              </h4>
+                              <span className="text-[10px] text-slate-500 Persian-font">
+                                عملکرد روی {toPersianDigits(settledMatchesCount)} بازی پایان یافته
+                              </span>
+                            </div>
+
+                            {settledMatchesCount === 0 ? (
+                              <p className="text-xs text-slate-500 text-center py-4 Persian-font">
+                                هنوز هیچ بازی در بخش ادمین به اتمام نرسیده است. پس از ثبت دستی نتایج، جزئیات پیش‌بینی در اینجا قرار می‌گیرد.
+                              </p>
+                            ) : (
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[350px] overflow-y-auto pr-1">
+                                {Object.values(manualOverrideMap)
+                                  .filter((m: any) => m.isOfficial)
+                                  .map((officialMatch: any) => {
+                                    const pred = u.predictions.find((p: any) => p.matchId === officialMatch.matchId);
+                                    
+                                    let pointsAwarded = 0;
+                                    let statusType: "exact" | "outcome" | "wrong" = "wrong";
+
+                                    if (pred) {
+                                      pointsAwarded = calculateMatchPoints(
+                                        { scoreA: Number(pred.scoreA), scoreB: Number(pred.scoreB) },
+                                        { scoreA: Number(officialMatch.scoreA), scoreB: Number(officialMatch.scoreB) },
+                                        !officialMatch.matchId.startsWith("G-")
+                                      );
+
+                                      if (pointsAwarded > 0) {
+                                        const isKnockout = !officialMatch.matchId.startsWith("G-");
+                                        const exactScoreVal = isKnockout ? 7 : 5;
+                                        statusType = pointsAwarded === exactScoreVal ? "exact" : "outcome";
+                                      }
+                                    }
+
+                                    return (
+                                      <div 
+                                        key={officialMatch.matchId}
+                                        className={`p-3 rounded-xl border flex items-center justify-between text-xs transition-colors ${
+                                          statusType === "exact"
+                                            ? "bg-emerald-950/15 border-emerald-500/20"
+                                            : statusType === "outcome"
+                                              ? "bg-indigo-950/15 border-indigo-500/20"
+                                              : "bg-slate-900 border-white/5"
+                                        }`}
+                                      >
+                                        <div className="text-right space-y-1">
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="text-[10px] bg-slate-900 border border-white/5 px-1.5 py-0.5 rounded text-slate-400 font-mono">{officialMatch.matchId}</span>
+                                            <span className="font-bold text-slate-200 Persian-font">{officialMatch.teamA.name} vs {officialMatch.teamB.name}</span>
+                                          </div>
+                                          <div className="text-[10px] text-slate-500 flex items-center gap-1">
+                                            <span>نتیجه واقعی:</span>
+                                            <span className="font-bold text-slate-400 font-mono">{toPersianDigits(officialMatch.scoreA)} - {toPersianDigits(officialMatch.scoreB)}</span>
+                                          </div>
+                                        </div>
+
+                                        <div className="text-left flex flex-col items-end gap-1 shrink-0">
+                                          {pred ? (
+                                            <>
+                                              <div className="flex items-center gap-1">
+                                                <span className="text-[10px] text-slate-400 Persian-font">پیش‌بینی:</span>
+                                                <span className="font-black text-cyan-400 font-mono bg-cyan-950/30 px-1.5 py-0.5 rounded border border-cyan-500/10">
+                                                  {toPersianDigits(pred.scoreA)} - {toPersianDigits(pred.scoreB)}
+                                                </span>
+                                              </div>
+                                              
+                                              {statusType === "exact" && (
+                                                <span className="text-[9.5px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 flex items-center gap-0.5 Persian-font">
+                                                  <CheckCircle size={10} />
+                                                  <span>نتیجه دقیق (+{toPersianDigits(pointsAwarded)} امتیاز)</span>
+                                                </span>
+                                              )}
+                                              {statusType === "outcome" && (
+                                                <span className="text-[9.5px] font-bold text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/20 flex items-center gap-0.5 Persian-font">
+                                                  <CheckCircle size={10} />
+                                                  <span>جهت درست (+{toPersianDigits(pointsAwarded)} امتیاز)</span>
+                                                </span>
+                                              )}
+                                              {statusType === "wrong" && (
+                                                <span className="text-[9.5px] font-bold text-slate-500 bg-slate-950 px-1.5 py-0.5 rounded border border-white/5 Persian-font">
+                                                  نادرست (۰ امتیاز)
+                                                </span>
+                                              )}
+                                            </>
+                                          ) : (
+                                            <span className="text-[10px] text-rose-450 bg-rose-500/5 px-2 py-1 rounded border border-rose-500/10 Persian-font font-bold">
+                                              ثبت نشده (۰ امتیاز)
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                              </div>
+                            )}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         )}
 

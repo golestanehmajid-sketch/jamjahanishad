@@ -904,8 +904,11 @@ export default function App() {
     setAutoSaveStatus("saving");
     try {
       // Compute prediction statistics
-      const groupPredCount = matches.filter(m => m.homeGoals !== undefined && m.awayGoals !== undefined).length;
-      const koPredCount = Object.keys(knockoutPredictions).length;
+      const groupPredCount = matches.filter(m => m.scoreA !== null && m.scoreB !== null).length;
+      const koPredCount = Object.keys(knockoutPredictions).filter(id => {
+        const p = knockoutPredictions[id];
+        return p && p.scoreA !== null && p.scoreB !== null;
+      }).length;
       const totalPreds = groupPredCount + koPredCount;
 
       let predictedChamp = "نامشخص";
@@ -914,10 +917,10 @@ export default function App() {
       } else {
         const finalMatch = knockoutPredictions["FINAL_2"];
         if (finalMatch) {
-          if (finalMatch.homeGoals !== undefined && finalMatch.awayGoals !== undefined) {
-            if (finalMatch.homeGoals > finalMatch.awayGoals) {
+          if (finalMatch.scoreA !== null && finalMatch.scoreB !== null) {
+            if (Number(finalMatch.scoreA) > Number(finalMatch.scoreB)) {
               predictedChamp = "ایران"; 
-            } else if (finalMatch.awayGoals > finalMatch.homeGoals) {
+            } else if (Number(finalMatch.scoreB) > Number(finalMatch.scoreA)) {
               predictedChamp = "بلژیک"; 
             }
             if (finalMatch.penaltyWinner) {
@@ -943,6 +946,25 @@ export default function App() {
         localStorage.getItem("wc_predictor_shad_hash") ||
         null;
 
+      // Extract user predictions to send to server
+      const groupPredictions = matches
+        .filter(m => m.scoreA !== null && m.scoreB !== null)
+        .map(m => ({
+          matchId: m.id,
+          scoreA: Number(m.scoreA),
+          scoreB: Number(m.scoreB),
+          winnerId: m.winnerId || null
+        }));
+
+      const knockoutPreds = Object.entries(knockoutPredictions)
+        .filter(([id, p]: [string, any]) => p && p.scoreA !== null && p.scoreB !== null)
+        .map(([id, p]: [string, any]) => ({
+          matchId: id,
+          scoreA: Number(p.scoreA),
+          scoreB: Number(p.scoreB),
+          winnerId: p.winnerId || null
+        }));
+
       const payload = {
         name: userName || "کاربر شاد",
         favoriteTeam: favoriteTeam || "ایران",
@@ -954,6 +976,7 @@ export default function App() {
         predictionsCount: totalPreds,
         shadHashedId,
         hashedId: shadHashedId,
+        predictions: [...groupPredictions, ...knockoutPreds]
       };
 
       let response;

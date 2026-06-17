@@ -207,6 +207,10 @@ app.post("/api/participants/register-shad", async (req, res) => {
       }
     );
 
+    if (req.body.predictions && Array.isArray(req.body.predictions)) {
+      await dbSaveUserPredictions(participant.id, req.body.predictions);
+    }
+
     res.status(201).json(participant);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -878,6 +882,9 @@ app.post("/api/participants", async (req, res) => {
           isPublished: req.body.isPublished ?? existing.isPublished,
           predictionsCount: req.body.predictionsCount ?? existing.predictionsCount,
         });
+        if (updated && req.body.predictions && Array.isArray(req.body.predictions)) {
+          await dbSaveUserPredictions(updated.id, req.body.predictions);
+        }
         return res.json(updated);
       }
 
@@ -900,6 +907,9 @@ app.post("/api/participants", async (req, res) => {
           predictionsCount: req.body.predictionsCount || 0,
         }
       );
+      if (saved && req.body.predictions && Array.isArray(req.body.predictions)) {
+        await dbSaveUserPredictions(saved.id, req.body.predictions);
+      }
       return res.status(201).json(saved);
     }
 
@@ -916,6 +926,9 @@ app.post("/api/participants", async (req, res) => {
       phoneOrEmail: req.body.phoneOrEmail || "",
     };
     const saved = await dbSaveParticipant(newParticipant);
+    if (saved && req.body.predictions && Array.isArray(req.body.predictions)) {
+      await dbSaveUserPredictions(saved.id, req.body.predictions);
+    }
     res.status(201).json(saved);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -927,6 +940,9 @@ app.put("/api/participants/:id", async (req, res) => {
     const { id } = req.params;
     const updated = await dbUpdateParticipant(id, req.body);
     if (updated) {
+      if (req.body.predictions && Array.isArray(req.body.predictions)) {
+        await dbSaveUserPredictions(id, req.body.predictions);
+      }
       res.json(updated);
     } else {
       res.status(404).json({ error: "Participant not found" });
