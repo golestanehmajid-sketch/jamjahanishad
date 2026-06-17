@@ -32,7 +32,8 @@ import {
   Ticket,
   Crown,
   Award,
-  Trophy
+  Trophy,
+  Search
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { generateGroupMatches, TEAMS } from "../data";
@@ -84,6 +85,14 @@ export const AppAdminDashboard: React.FC = () => {
   const [correctnessCriteria, setCorrectnessCriteria] = useState<"exact" | "outcome">("exact");
   const [actualWinnerTeam, setActualWinnerTeam] = useState<string>("ایران");
   
+  // Quick Results editing and predictions filtering under Raffle
+  const [quickScoreA, setQuickScoreA] = useState<number>(0);
+  const [quickScoreB, setQuickScoreB] = useState<number>(0);
+  const [isSavingQuickScore, setIsSavingQuickScore] = useState<boolean>(false);
+  const [isEditingScore, setIsEditingScore] = useState<boolean>(false);
+  const [predictionViewFilter, setPredictionViewFilter] = useState<"all" | "correct_exact" | "correct_outcome" | "incorrect">("all");
+  const [predictionSearch, setPredictionSearch] = useState<string>("");
+
   const [isDrawing, setIsDrawing] = useState<boolean>(false);
   const [drawnName, setDrawnName] = useState<string>("");
   const [raffleWinner, setRaffleWinner] = useState<Participant | null>(null);
@@ -228,6 +237,64 @@ export const AppAdminDashboard: React.FC = () => {
       console.error("Error reading admin statistics", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveQuickScore = async () => {
+    if (!selectedMatchId) return;
+    const match = matches.find(m => m.id === selectedMatchId);
+    if (!match) return;
+
+    setIsSavingQuickScore(true);
+    try {
+      const payload = {
+        matchId: selectedMatchId,
+        scoreA: Number(quickScoreA),
+        scoreB: Number(quickScoreB),
+        isOfficial: true,
+        isLive: false,
+        minute: 90,
+        teamA: {
+          id: match.teamA.id,
+          name: match.teamA.name,
+          flag: match.teamA.flag || ""
+        },
+        teamB: {
+          id: match.teamB.id,
+          name: match.teamB.name,
+          flag: match.teamB.flag || ""
+        }
+      };
+
+      const res = await fetch("/api/manual-results", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-results-password": "natijeh1405"
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.item) {
+          setManualResults(prev => ({
+            ...prev,
+            [selectedMatchId]: json.item
+          }));
+          setIsEditingScore(false);
+          alert(`🟢 نتیجه بازی ${match.teamA.name} - ${match.teamB.name} با موفقیت ثبت شد!`);
+        } else {
+          alert("❌ خطا در ثبت پاسخ سرور.");
+        }
+      } else {
+        alert("❌ خطا در برقراری ارتباط با سرور یا رمز نادرست است.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("❌ خطای غیرمنتظره در ثبت نتیجه.");
+    } finally {
+      setIsSavingQuickScore(false);
     }
   };
 
@@ -1544,10 +1611,20 @@ export const AppAdminDashboard: React.FC = () => {
                       <select
                         value={selectedMatchId}
                         onChange={(e) => {
-                          setSelectedMatchId(e.target.value);
+                          const mId = e.target.value;
+                          setSelectedMatchId(mId);
                           setRaffleWinner(null);
                           setShadApiDetails(null);
                           setShadError(null);
+                          setIsEditingScore(false);
+                          const res = manualResults[mId];
+                          if (res) {
+                            setQuickScoreA(res.scoreA);
+                            setQuickScoreB(res.scoreB);
+                          } else {
+                            setQuickScoreA(0);
+                            setQuickScoreB(0);
+                          }
                         }}
                         className="w-full bg-slate-900 text-slate-200 text-xs font-bold border border-white/10 rounded-xl px-3 py-2.5 outline-none focus:border-emerald-500/40 cursor-pointer"
                       >
@@ -1579,12 +1656,60 @@ export const AppAdminDashboard: React.FC = () => {
                           const mObj = matches.find(m => m.id === selectedMatchId);
                           const resultObj = manualResults[selectedMatchId];
 
-                          if (!resultObj) {
+                          if (!resultObj || isEditingScore) {
                             return (
-                              <div className="text-center py-4 text-amber-400 text-xs font-bold flex flex-col items-center gap-2">
-                                <ShieldAlert size={28} className="text-amber-500 animate-pulse" />
-                                <span className="text-[13px] font-black leading-normal">نتیجه رسمی برای این بازی در سیستم ثبت نشده است!</span>
-                                <span className="text-[10px] text-slate-400 font-medium">لطفاً ابتدا به تب «ثبت نتایج» هدایت شده و نتیجه پایانی ترجیحی را ذخیره فرمایید.</span>
+                              <div className="p-5 bg-slate-950/40 rounded-xl space-y-4 border border-amber-500/10 text-right" dir="rtl">
+                                <div className="flex items-center gap-2 text-amber-400 font-black text-sm">
+                                  <ShieldAlert size={20} className="text-amber-550 shrink-0" />
+                                  <span>{isEditingScore ? "✏️ ویرایش نتیجه رسمی مسابقه" : "⚠️ رکوردی از نتیجه رسمی مسابقه ایران یا انتخابی شما یافت نشد!"}</span>
+                                </div>
+                                <p className="text-[11px] text-slate-400 leading-relaxed">
+                                  جهت مشاهده تفکیک نام‌ کاربری و شماره تماس افرادی که درست پیش‌بینی کرده‌اند و برگزاری زنده قرعه‌کشی، لطفاً نتیجه واقعی ثبت‌شده نهایی مسابقه را در کادرهای زیر تایید یا تنظیم فرمایید:
+                                </p>
+                                
+                                <div className="flex items-center justify-center gap-6 p-4 bg-slate-900 rounded-lg border border-white/5">
+                                  <div className="flex flex-col items-center gap-1.5">
+                                    <span className="text-[10px] text-slate-300 font-bold">{mObj?.teamA.flag} {mObj?.teamA.name}</span>
+                                    <input 
+                                      type="number"
+                                      min="0"
+                                      value={quickScoreA}
+                                      onChange={(e) => setQuickScoreA(Math.max(0, parseInt(e.target.value) || 0))}
+                                      className="w-16 text-center bg-slate-950 border border-white/10 rounded-md py-1.5 font-mono text-xs font-bold text-slate-100 placeholder-slate-600 outline-none focus:border-pink-500/50"
+                                    />
+                                  </div>
+                                  <span className="text-slate-500 font-bold text-xs pt-4">در مقابل</span>
+                                  <div className="flex flex-col items-center gap-1.5">
+                                    <span className="text-[10px] text-slate-300 font-bold">{mObj?.teamB.flag} {mObj?.teamB.name}</span>
+                                    <input 
+                                      type="number"
+                                      min="0"
+                                      value={quickScoreB}
+                                      onChange={(e) => setQuickScoreB(Math.max(0, parseInt(e.target.value) || 0))}
+                                      className="w-16 text-center bg-slate-950 border border-white/10 rounded-md py-1.5 font-mono text-xs font-bold text-slate-100 placeholder-slate-600 outline-none focus:border-pink-500/50"
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="flex justify-between items-center pt-2">
+                                  {isEditingScore && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setIsEditingScore(false)}
+                                      className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-slate-800 border border-white/10 text-slate-400 hover:text-slate-100 transition-all cursor-pointer"
+                                    >
+                                      انصراف
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    disabled={isSavingQuickScore}
+                                    onClick={handleSaveQuickScore}
+                                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 disabled:opacity-40 text-white font-black text-[11px] duration-150 cursor-pointer shadow-lg shadow-pink-500/15 flex items-center gap-1.5 mr-auto"
+                                  >
+                                    <span>{isSavingQuickScore ? "در حال ثبت..." : "ذخیره و فعالسازی قرعه‌کشی 💾"}</span>
+                                  </button>
+                                </div>
                               </div>
                             );
                           }
@@ -1614,19 +1739,62 @@ export const AppAdminDashboard: React.FC = () => {
                             }
                           });
 
+                          // Detailed list filter logic
+                          const matchPredictions = predictions.filter(p => p.matchId === selectedMatchId);
+                          const filteredMatchPreds = matchPredictions.filter(p => {
+                            const pScoreA = Number(p.scoreA);
+                            const pScoreB = Number(p.scoreB);
+                            const predDiff = pScoreA - pScoreB;
+
+                            const isExact = pScoreA === scoreA && pScoreB === scoreB;
+                            const isOutcome = (actualDiff > 0 && predDiff > 0) || (actualDiff < 0 && predDiff < 0) || (actualDiff === 0 && predDiff === 0);
+
+                            const passCriteria = correctnessCriteria === "exact" ? isExact : isOutcome;
+
+                            let matchesSearch = true;
+                            if (predictionSearch.trim() !== "") {
+                              const part = participants.find(u => u.id === p.participantId);
+                              const nameStr = part?.name || "";
+                              const contactStr = part?.phoneOrEmail || "";
+                              const searchLower = predictionSearch.toLowerCase();
+                              matchesSearch = nameStr.toLowerCase().includes(searchLower) || contactStr.toLowerCase().includes(searchLower) || p.participantId.toLowerCase().includes(searchLower);
+                            }
+                            if (!matchesSearch) return false;
+
+                            if (predictionViewFilter === "all") return true;
+                            if (predictionViewFilter === "correct_exact") return isExact;
+                            if (predictionViewFilter === "correct_outcome") return isOutcome;
+                            if (predictionViewFilter === "incorrect") return !passCriteria;
+                            return true;
+                          });
+
                           return (
-                            <div className="space-y-4">
+                            <div className="space-y-4 text-right" dir="rtl">
                               {/* Match Visual Showcase Header */}
-                              <div className="flex items-center justify-between bg-black/30 p-3 rounded-lg border border-white/5 text-xs text-slate-200">
-                                <span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded">
-                                  {correctnessCriteria === "exact" ? "🎯 تفاضل و گل دقیق" : "⚖️ جهت برد/مساوی"}
-                                </span>
-                                <div className="flex items-center gap-2 font-bold text-[13px]">
+                              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-black/40 p-4 rounded-xl border border-white/5 text-xs text-slate-200">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded">
+                                    {correctnessCriteria === "exact" ? "🎯 معیار: نتیجه دقیق" : "⚖️ معیار: جهت برد/مساوی"}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-3 font-bold text-[14px]">
                                   <span>{mObj?.teamA.flag} {mObj?.teamA.name}</span>
-                                  <span className="text-emerald-400 bg-emerald-500/15 border border-emerald-500/25 px-2 py-0.5 rounded-md font-mono">{scoreA}</span>
+                                  <span className="text-emerald-400 bg-emerald-500/15 border border-emerald-500/25 px-3 py-1 rounded-md font-mono text-base">{scoreA}</span>
                                   <span>-</span>
-                                  <span className="text-emerald-400 bg-emerald-500/15 border border-emerald-500/25 px-2 py-0.5 rounded-md font-mono">{scoreB}</span>
+                                  <span className="text-emerald-400 bg-emerald-500/15 border border-emerald-500/25 px-3 py-1 rounded-md font-mono text-base">{scoreB}</span>
                                   <span>{mObj?.teamB.flag} {mObj?.teamB.name}</span>
+
+                                  <button 
+                                    type="button"
+                                    onClick={() => {
+                                      setQuickScoreA(scoreA);
+                                      setQuickScoreB(scoreB);
+                                      setIsEditingScore(true);
+                                    }}
+                                    className="mr-3 text-[10px] px-2.5 py-1 rounded bg-white/5 hover:bg-white/10 text-slate-300 font-bold border border-white/10 cursor-pointer duration-150 active:scale-95 transition-all outline-none"
+                                  >
+                                    ✏️ ویرایش نتیجه
+                                  </button>
                                 </div>
                               </div>
 
@@ -1654,19 +1822,171 @@ export const AppAdminDashboard: React.FC = () => {
                                 </div>
                               </div>
 
-                              {/* Eligible users list preview drawer */}
-                              {eligibleList.length > 0 && !isDrawing && !raffleWinner && (
-                                <div className="space-y-1.5 text-right">
-                                  <span className="text-[10px] text-slate-400 font-bold block">لیست واجدین شرایط جهت تفحص صوری:</span>
-                                  <div className="max-h-[140px] overflow-y-auto border border-white/5 bg-slate-950/40 rounded-lg p-2 flex flex-wrap gap-1.5 justify-end">
-                                    {eligibleList.map((eu, idx) => (
-                                      <span key={eu.id + "-" + idx} className="text-[10px] font-bold text-slate-300 bg-slate-800/50 border border-white/5 px-2 py-1 rounded select-none">
-                                        👤 {eu.name || "بی‌نام"}
-                                      </span>
-                                    ))}
+                              {/* Predictions Detailed List Board */}
+                              <div className="space-y-3 pt-3 border-t border-white/5">
+                                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                                  <span className="text-[11px] sm:text-xs font-black text-slate-300">🔍 لیست و کارنامه پیش‌بینی‌های ثبت‌شده این مسابقه:</span>
+                                  
+                                  {/* Search Box */}
+                                  <div className="relative w-full sm:w-56">
+                                    <input 
+                                      type="text" 
+                                      placeholder="جستجوی کاربر یا شماره تماس..."
+                                      value={predictionSearch}
+                                      onChange={(e) => setPredictionSearch(e.target.value)}
+                                      className="w-full bg-slate-950 border border-white/5 rounded-lg pl-8 pr-2.5 py-1 text-[10px] font-bold text-slate-300 placeholder-slate-600 outline-none focus:border-emerald-500/30 text-right"
+                                      dir="rtl"
+                                    />
+                                    <div className="absolute left-2.5 top-1.5 text-slate-500">
+                                      <Search size={11} />
+                                    </div>
                                   </div>
                                 </div>
-                              )}
+
+                                {/* Filters tabs */}
+                                <div className="flex flex-wrap gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setPredictionViewFilter("all")}
+                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all border shrink-0 cursor-pointer ${
+                                      predictionViewFilter === "all"
+                                        ? "bg-slate-800 border-white/10 text-slate-200"
+                                        : "bg-transparent border-transparent text-slate-450 hover:text-slate-300"
+                                    }`}
+                                  >
+                                    همه پیش‌بینی‌ها ({matchPredictions.length})
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPredictionViewFilter("correct_exact")}
+                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all border shrink-0 cursor-pointer ${
+                                      predictionViewFilter === "correct_exact"
+                                        ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                                        : "bg-transparent border-transparent text-slate-450 hover:text-emerald-500/70"
+                                    }`}
+                                  >
+                                    نتیجه دقیق 🎯 ({matchPredictions.filter(p => Number(p.scoreA) === scoreA && Number(p.scoreB) === scoreB).length})
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPredictionViewFilter("correct_outcome")}
+                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all border shrink-0 cursor-pointer ${
+                                      predictionViewFilter === "correct_outcome"
+                                        ? "bg-indigo-500/10 border-indigo-500/20 text-indigo-400"
+                                        : "bg-transparent border-transparent text-slate-450 hover:text-indigo-500/70"
+                                    }`}
+                                  >
+                                    جهت درست ⚖️ ({matchPredictions.filter(p => {
+                                      const pScoreA = Number(p.scoreA);
+                                      const pScoreB = Number(p.scoreB);
+                                      const predDiff = pScoreA - pScoreB;
+                                      return (actualDiff > 0 && predDiff > 0) || (actualDiff < 0 && predDiff < 0) || (actualDiff === 0 && predDiff === 0);
+                                    }).length})
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPredictionViewFilter("incorrect")}
+                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all border shrink-0 cursor-pointer ${
+                                      predictionViewFilter === "incorrect"
+                                        ? "bg-rose-500/10 border-rose-500/20 text-rose-400"
+                                        : "bg-transparent border-transparent text-slate-450 hover:text-rose-500/70"
+                                    }`}
+                                  >
+                                    حدس‌های اشتباه ❌ ({matchPredictions.filter(p => {
+                                      const pScoreA = Number(p.scoreA);
+                                      const pScoreB = Number(p.scoreB);
+                                      const predDiff = pScoreA - pScoreB;
+                                      const isExact = pScoreA === scoreA && pScoreB === scoreB;
+                                      const isOutcome = (actualDiff > 0 && predDiff > 0) || (actualDiff < 0 && predDiff < 0) || (actualDiff === 0 && predDiff === 0);
+                                      const passCriteria = correctnessCriteria === "exact" ? isExact : isOutcome;
+                                      return !passCriteria;
+                                    }).length})
+                                  </button>
+                                </div>
+
+                                {/* Detailed Table of Predictions */}
+                                <div className="border border-white/5 rounded-xl overflow-hidden bg-slate-950/20 max-h-[300px] overflow-y-auto">
+                                  {filteredMatchPreds.length === 0 ? (
+                                    <div className="p-8 text-center text-slate-500 text-[11px] font-bold">
+                                      پیش‌بینی یا کاربری با این شرایط/فیلتر در سیستم یافت نشد.
+                                    </div>
+                                  ) : (
+                                    <table className="w-full text-right text-[11px] font-bold border-collapse">
+                                      <thead>
+                                        <tr className="bg-slate-950/30 border-b border-white/5 text-slate-455 text-[10px]">
+                                          <th className="p-2 py-2.5 text-center w-[40px]">ردیف</th>
+                                          <th className="p-2">نام کاربر</th>
+                                          <th className="p-2">اطلاعات تماس شاد / ایمیل</th>
+                                          <th className="p-2 text-center w-[100px]">تیم محبوب</th>
+                                          <th className="p-2 text-center w-[80px]">پیش‌بینی</th>
+                                          <th className="p-2 text-center w-[100px]">امتیاز فعلی</th>
+                                          <th className="p-2 text-center w-[120px]">عملیات</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {filteredMatchPreds.map((p, idx) => {
+                                          const part = participants.find(u => u.id === p.participantId);
+                                          const pScoreA = Number(p.scoreA);
+                                          const pScoreB = Number(p.scoreB);
+                                          const predDiff = pScoreA - pScoreB;
+
+                                          const isExact = pScoreA === scoreA && pScoreB === scoreB;
+                                          const isOutcome = (actualDiff > 0 && predDiff > 0) || (actualDiff < 0 && predDiff < 0) || (actualDiff === 0 && predDiff === 0);
+
+                                          return (
+                                            <tr key={p.participantId + "-" + idx} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                                              <td className="p-2 text-center font-mono text-slate-500">{idx + 1}</td>
+                                              <td className="p-2 text-slate-200">
+                                                {part?.name || "بی‌نام"}
+                                              </td>
+                                              <td className="p-2 font-mono text-slate-300 text-left" dir="ltr">
+                                                {part?.phoneOrEmail || "استعلام از شاد..."}
+                                              </td>
+                                              <td className="p-2 text-center text-[10px] text-slate-400">
+                                                {part?.favoriteTeam || "-"}
+                                              </td>
+                                              <td className="p-2 text-center font-mono text-slate-100 text-[11px]">
+                                                {pScoreA} - {pScoreB}
+                                              </td>
+                                              <td className="p-2 text-center">
+                                                {isExact ? (
+                                                  <span className="inline-block px-2 py-0.5 rounded-full text-[9px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                                                    🎯 دقیق ({pScoreA}-{pScoreB})
+                                                  </span>
+                                                ) : isOutcome ? (
+                                                  <span className="inline-block px-2 py-0.5 rounded-full text-[9px] bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+                                                    ⚖️ جهت درست
+                                                  </span>
+                                                ) : (
+                                                  <span className="inline-block px-2 py-0.5 rounded-full text-[9px] bg-rose-500/10 border border-rose-500/20 text-rose-400">
+                                                    ❌ اشتباه
+                                                  </span>
+                                                )}
+                                              </td>
+                                              <td className="p-2 text-center">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    if (part) {
+                                                      setRaffleWinner(part);
+                                                      fetchWinnerShadDetails(part.id, part.name);
+                                                    } else {
+                                                      alert("کاربر یافت نشد.");
+                                                    }
+                                                  }}
+                                                  className="px-2.5 py-1 text-[9px] font-black rounded-lg bg-pink-500/10 border border-pink-500/20 hover:bg-pink-500/20 hover:text-white transition-all duration-150 cursor-pointer text-pink-300 outline-none"
+                                                >
+                                                  🎁 گزینش دستی برنده
+                                                </button>
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  )}
+                                </div>
+                              </div>
                             </div>
                           );
                         })()}
