@@ -36,7 +36,7 @@ import {
   Search
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { generateGroupMatches, TEAMS } from "../data";
+import { generateGroupMatches, TEAMS, getMatchKickoffDate } from "../data";
 
 interface Participant {
   id: string;
@@ -90,6 +90,7 @@ export const AppAdminDashboard: React.FC = () => {
   const [quickScoreB, setQuickScoreB] = useState<number>(0);
   const [isSavingQuickScore, setIsSavingQuickScore] = useState<boolean>(false);
   const [isEditingScore, setIsEditingScore] = useState<boolean>(false);
+  const [isSyncingLiveScores, setIsSyncingLiveScores] = useState<boolean>(false);
   const [predictionViewFilter, setPredictionViewFilter] = useState<"all" | "correct_exact" | "correct_outcome" | "incorrect">("all");
   const [predictionSearch, setPredictionSearch] = useState<string>("");
 
@@ -237,6 +238,134 @@ export const AppAdminDashboard: React.FC = () => {
       console.error("Error reading admin statistics", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAutoSyncWithLiveScores = async () => {
+    setIsSyncingLiveScores(true);
+    try {
+      const res = await fetch("/api/sports-hub/livescore");
+      if (!res.ok) {
+        alert("❌ خطا در برقراری ارتباط با وب‌سرویس نتایج زنده.");
+        return;
+      }
+      const json = await res.json();
+      if (!json.success || !json.data) {
+        alert("❌ فید اطلاعات نتایج زنده خالی یا نامعتبر بود.");
+        return;
+      }
+
+      const extractedMatches: any[] = [];
+      for (const league of json.data) {
+        for (const dateObj of league.dates || []) {
+          for (const sm of dateObj.matches || []) {
+            extractedMatches.push({
+              ...sm,
+              dateLabel: dateObj.date
+            });
+          }
+        }
+      }
+
+      if (extractedMatches.length === 0) {
+        alert("⚠️ هیچ مسابقه‌ای در وب‌سرویس زنده یافت نشد.");
+        return;
+      }
+
+      const norm = (s: string) => s.replace(/[\s\-_,\.]/g, "").toLowerCase();
+      const matchTeamEn = (team: any, scrapName: string) => {
+        if (!team || !scrapName) return false;
+        const normTeamEn = norm(team.nameEn || "");
+        const scrapEn = scrapName.toLowerCase();
+        
+        const synonyms: Record<string, string[]> = {
+          "usa": ["united states", "united states of america", "us", "america", "آمریکا", "ایالات متحده"],
+          "korea": ["south korea", "korea republic", "korea", "korea rep", "کره جنوبی", "کره"],
+          "drcongo": ["dr congo", "congo dr", "democratic republic of the congo", "congo", "کنگو", "جمهوری دموکراتیک کنگو"],
+          "czech": ["czech republic", "czechia", "czech", "جمهوری چک", "چک"],
+          "ivorycoast": ["ivory coast", "côte d'ivoire", "cote d'ivoire", "ivorycoast", "ساحل عاج"],
+          "saudi": ["saudi arabia", "saudi", "saudi_arabia", "عربستان", "عربستان سعودی"],
+          "southafrica": ["south africa", "s. africa", "آفریقای جنوبی"],
+          "newzealand": ["new zealand", "n. zealand", "نیوزیلند"],
+          "capeverde": ["cape verde", "cabo verde", "کیپ ورد"],
+          "morocco": ["morocco", "مراکش", "مغرب"],
+          "england": ["england", "انگلستان", "انگلیس"]
+        };
+
+        for (const [key, list] of Object.entries(synonyms)) {
+          const isTeamMatch = normTeamEn.includes(key) || key.includes(normTeamEn);
+          if (isTeamMatch) {
+            const matchFound = list.some(item => {
+              const lowerItem = item.toLowerCase();
+              return scrapEn === lowerItem || norm(scrapEn) === norm(lowerItem);
+            });
+            if (matchFound) return true;
+          }
+        }
+
+        if (scrapEn.includes(normTeamEn) || normTeamEn.includes(scrapEn)) {
+          return true;
+        }
+        return false;
+      };
+
+      const finishedScraped = extractedMatches.filter(sm => sm.status === 2 && sm.hostGoals !== null && sm.guestGoals !== null);
+      
+      if (finishedScraped.length === 0) {
+        alert("ℹ️ در حال حاضر هیچ بازی خاتمه‌یافته جدیدی در فید نتایج زنده یافت نشد.");
+        return;
+      }
+
+      let syncCount = 0;
+      for (const m of matches) {
+        const found = finishedScraped.find(sm => {
+          const hostOk = matchTeamEn(m.teamA, sm.host?.nameEn || sm.host) && matchTeamEn(m.teamB, sm.guest?.nameEn || sm.guest);
+          const reversedOk = matchTeamEn(m.teamA, sm.guest?.nameEn || sm.guest) && matchTeamEn(m.teamB, sm.host?.nameEn || sm.host);
+          return hostOk || reversedOk;
+        });
+
+        if (found) {
+          const isReversed = matchTeamEn(m.teamA, found.guest?.nameEn || found.guest);
+          const scoreA = isReversed ? found.guestGoals : found.hostGoals;
+          const scoreB = isReversed ? found.hostGoals : found.guestGoals;
+
+          const payload = {
+            matchId: m.id,
+            scoreA: Number(scoreA),
+            scoreB: Number(scoreB),
+            isOfficial: true,
+            isLive: false,
+            minute: 90,
+            teamA: { id: m.teamA.id, name: m.teamA.name, flag: m.teamA.flag || "" },
+            teamB: { id: m.teamB.id, name: m.teamB.name, flag: m.teamB.flag || "" }
+          };
+
+          const sRes = await fetch("/api/manual-results", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-results-password": "natijeh1405"
+            },
+            body: JSON.stringify(payload)
+          });
+          if (sRes.ok) {
+            syncCount++;
+          }
+        }
+      }
+
+      if (syncCount > 0) {
+        await fetchData();
+        alert(`🟢 موفقیت! تعداد ${syncCount} بازی پایان یافته با موفقیت در سیستم قرعه‌کشی ثبت شد و پیش‌بینی‌های صحیح فوراً محاسبه شدند.`);
+      } else {
+        alert("ℹ️ نتایج تمام بازی‌های خاتمه‌یافته قبلاً همگام‌سازی یا به صورت دستی ثبت شده‌اند.");
+      }
+
+    } catch (err) {
+      console.error(err);
+      alert("❌ خطای پیش‌بینی نشده در اتصال به وب‌سرویس.");
+    } finally {
+      setIsSyncingLiveScores(false);
     }
   };
 
@@ -1607,7 +1736,18 @@ export const AppAdminDashboard: React.FC = () => {
 
                     {/* Choose Match Dropdown */}
                     <div className="space-y-1.5">
-                      <label className="text-[10px] sm:text-xs text-slate-400 font-bold">انتخاب مسابقه مورد نظر:</label>
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] sm:text-xs text-slate-400 font-bold">انتخاب مسابقه مورد نظر:</label>
+                        <button
+                          type="button"
+                          disabled={isSyncingLiveScores}
+                          onClick={handleAutoSyncWithLiveScores}
+                          className="flex items-center gap-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/25 text-[10px] sm:text-xs px-2.5 py-1 rounded-lg font-black transition-all duration-150 cursor-pointer disabled:opacity-50"
+                        >
+                          <RefreshCw size={11} className={isSyncingLiveScores ? "animate-spin" : ""} />
+                          <span>{isSyncingLiveScores ? "در حال دریافت نتایج..." : "🔄 همگام‌سازی خودکار نتایج واقعی"}</span>
+                        </button>
+                      </div>
                       <select
                         value={selectedMatchId}
                         onChange={(e) => {
@@ -1636,6 +1776,7 @@ export const AppAdminDashboard: React.FC = () => {
                             }
                             return true;
                           })
+                          .sort((a, b) => getMatchKickoffDate(a.id).getTime() - getMatchKickoffDate(b.id).getTime())
                           .map((m) => {
                             const result = manualResults[m.id];
                             const scoreText = result 

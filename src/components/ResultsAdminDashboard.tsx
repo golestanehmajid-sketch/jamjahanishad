@@ -346,7 +346,7 @@ export const ResultsAdminDashboard: React.FC<{ setActiveTab?: (tab: any) => void
       }
 
       return true;
-    });
+    }).sort((a, b) => getMatchKickoffDate(a.id).getTime() - getMatchKickoffDate(b.id).getTime());
   }, [groupMatches, manualOverrideMap, searchTerm, filterRound, filterGroup, filterOverrideStatus, filterIranOnly]);
 
   if (!isAuthorized) {

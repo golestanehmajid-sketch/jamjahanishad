@@ -219,8 +219,34 @@ export const SoccerLiveTracker: React.FC<SoccerLiveTrackerProps> = ({
                         <h4 className="text-xs font-black text-slate-300">{league.title}</h4>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {league.dates?.flatMap((dateObj: any) =>
-                          dateObj.matches?.map((scrapedMatch: ScrapedMatch, mIdx: number) => {
+                        {(() => {
+                          const allMatches = league.dates?.flatMap((dateObj: any, dIdx: number) => 
+                            (dateObj.matches || []).map((m: any) => ({
+                              ...m,
+                              dateIndex: dIdx,
+                              dateLabel: dateObj.date
+                            }))
+                          ) || [];
+
+                          const persianToEnglishDigits = (str: string): string => {
+                            const persianDigits = [/۰/g, /۱/g, /۲/g, /۳/g, /۴/g, /۵/g, /۶/g, /۷/g, /۸/g, /۹/g];
+                            let res = str;
+                            for (let i = 0; i < 10; i++) {
+                              res = res.replace(persianDigits[i], String(i));
+                            }
+                            return res;
+                          };
+
+                          const sortedMatches = [...allMatches].sort((a, b) => {
+                            if (a.dateIndex !== b.dateIndex) {
+                              return a.dateIndex - b.dateIndex;
+                            }
+                            const timeA = persianToEnglishDigits(a.time || "00:00");
+                            const timeB = persianToEnglishDigits(b.time || "00:00");
+                            return timeA.localeCompare(timeB);
+                          });
+
+                          return sortedMatches.map((scrapedMatch: any, mIdx: number) => {
                             const isMatchLive = scrapedMatch.status === 1;
                             const isFinished = scrapedMatch.status === 2;
 
@@ -251,7 +277,7 @@ export const SoccerLiveTracker: React.FC<SoccerLiveTrackerProps> = ({
 
                                   <div className="flex items-center gap-1 text-[10px] text-slate-500">
                                     <Clock size={10} />
-                                    <span>{dateObj.date}</span>
+                                    <span>{scrapedMatch.dateLabel}</span>
                                   </div>
                                 </div>
 
@@ -329,7 +355,7 @@ export const SoccerLiveTracker: React.FC<SoccerLiveTrackerProps> = ({
                               </div>
                             );
                           })
-                        )}
+                        })()}
                       </div>
                     </div>
                   ))}
