@@ -829,6 +829,140 @@ export async function seedDefaultMockPredictions() {
   }
 
   ensureDataDir();
-  fs.writeFileSync(PREDICTIONS_FILE, JSON.stringify(mockData, null, 2), "utf-8");
+  let existingData: Record<string, any[]> = {};
+  if (fs.existsSync(PREDICTIONS_FILE)) {
+    try {
+      const content = fs.readFileSync(PREDICTIONS_FILE, "utf-8");
+      existingData = JSON.parse(content);
+    } catch (_) {}
+  }
+  const merged = { ...existingData, ...mockData };
+  fs.writeFileSync(PREDICTIONS_FILE, JSON.stringify(merged, null, 2), "utf-8");
 }
+
+export async function dbRestoreAllBackup(
+  participantsList: any[],
+  predictionsData: any,
+  actionLogsList: any[]
+): Promise<boolean> {
+  await initDb();
+
+  // 1. Restore Participants
+  await dbBulkSaveParticipants(participantsList);
+
+  // 2. Restore Predictions
+  if (pool) {
+    let client;
+    try {
+      client = await pool.connect();
+      await client.query("BEGIN");
+      await client.query("DELETE FROM predictions");
+      
+      const insertPrediction = async (pId: string, pred: any) => {
+        const id = `${pId}_${pred.matchId || pred.match_id}`;
+        await client.query(`
+          INSERT INTO predictions (id, participant_id, match_id, score_a, score_b, winner_id, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `, [
+          id, 
+          pId, 
+          pred.matchId || pred.match_id || "", 
+          pred.scoreA ?? pred.score_a ?? null, 
+          pred.scoreB ?? pred.score_b ?? null, 
+          pred.winnerId || pred.winner_id || null, 
+          pred.updatedAt || pred.updated_at || new Date().toISOString()
+        ]);
+      };
+
+      if (Array.isArray(predictionsData)) {
+        for (const p of predictionsData) {
+          await insertPrediction(p.participantId || p.participant_id, p);
+        }
+      } else if (predictionsData && typeof predictionsData === "object") {
+        for (const [partId, preds] of Object.entries(predictionsData)) {
+          if (Array.isArray(preds)) {
+            for (const p of preds) {
+              await insertPrediction(partId, p);
+            }
+          }
+        }
+      }
+      await client.query("COMMIT");
+    } catch (err) {
+      if (client) {
+        try { await client.query("ROLLBACK"); } catch (_) {}
+      }
+      console.error("PG Restore Predictions failed:", err);
+    } finally {
+      if (client) client.release();
+    }
+  }
+
+  // Also write to files
+  ensureDataDir();
+  let fileDataMap: Record<string, any[]> = {};
+  if (Array.isArray(predictionsData)) {
+    predictionsData.forEach(p => {
+      const partId = p.participantId || p.participant_id;
+      if (partId) {
+        if (!fileDataMap[partId]) fileDataMap[partId] = [];
+        fileDataMap[partId].push({
+          matchId: p.matchId || p.match_id,
+          scoreA: p.scoreA ?? p.score_a,
+          scoreB: p.scoreB ?? p.score_b,
+          winnerId: p.winnerId || p.winner_id || null,
+          updatedAt: p.updatedAt || p.updated_at || new Date().toISOString()
+        });
+      }
+    });
+  } else if (predictionsData && typeof predictionsData === "object") {
+    for (const [partId, preds] of Object.entries(predictionsData)) {
+      if (Array.isArray(preds)) {
+        fileDataMap[partId] = preds.map(p => ({
+          matchId: p.matchId || p.match_id,
+          scoreA: p.scoreA ?? p.score_a,
+          scoreB: p.scoreB ?? p.score_b,
+          winnerId: p.winnerId || p.winner_id || null,
+          updatedAt: p.updatedAt || p.updated_at || new Date().toISOString()
+        }));
+      }
+    }
+  }
+  fs.writeFileSync(PREDICTIONS_FILE, JSON.stringify(fileDataMap, null, 2), "utf-8");
+
+  // 3. Restore Action Logs
+  if (pool) {
+    let client;
+    try {
+      client = await pool.connect();
+      await client.query("BEGIN");
+      await client.query("DELETE FROM action_logs");
+      for (const log of actionLogsList) {
+        await client.query(`
+          INSERT INTO action_logs (id, username, action, timestamp, exact_time, details)
+          VALUES ($1, $2, $3, $4, $5, $6)
+        `, [
+          log.id,
+          log.username,
+          log.action,
+          log.timestamp,
+          log.exactTime || null,
+          log.details ? (typeof log.details === "object" ? JSON.stringify(log.details) : String(log.details)) : null
+        ]);
+      }
+      await client.query("COMMIT");
+    } catch (err) {
+      if (client) {
+        try { await client.query("ROLLBACK"); } catch (_) {}
+      }
+      console.error("PG Restore Action Logs failed:", err);
+    } finally {
+      if (client) client.release();
+    }
+  }
+  fs.writeFileSync(ACTION_LOGS_FILE, JSON.stringify(actionLogsList, null, 2), "utf-8");
+
+  return true;
+}
+
 

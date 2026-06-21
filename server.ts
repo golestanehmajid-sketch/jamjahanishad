@@ -20,7 +20,8 @@ const ai = process.env.GEMINI_API_KEY
     })
   : null;
 
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 import {
   initDb,
@@ -37,6 +38,7 @@ import {
   dbSaveUserPredictions,
   dbGetUserPredictions,
   dbGetAllPredictions,
+  dbRestoreAllBackup,
 } from "./src/db";
 import { getShadAccessToken, fetchShadUserEvent } from "./src/shad-api";
 
@@ -841,6 +843,262 @@ app.get("/api/admin/predictions-csv", async (req, res) => {
     res.write(Buffer.from("\uFEFF", "utf-8"));
     res.write(Buffer.from(csvContent, "utf-8"));
     res.end();
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 📌 DATA BACKUP, SAFETY & MULTIPLE EXPORT ENDPOINTS
+const BACKUPS_DIR = path.join(process.env.DATA_DIR || path.join(process.cwd(), "data"), "backups");
+
+function ensureBackupsDir() {
+  if (!fs.existsSync(BACKUPS_DIR)) {
+    fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+  }
+}
+
+// 1. Export Participants Only as CSV
+app.get("/api/admin/participants-csv", async (req, res) => {
+  try {
+    const participants = await dbGetParticipants();
+    const cols = [
+      "شناسه",
+      "نام و نام خانوادگی",
+      "شماره تماس/ایمیل",
+      "تیم محبوب",
+      "قهرمان احتمالی",
+      "امتیاز کل",
+      "تعداد پیش‌بینی‌ها",
+      "استان",
+      "شهرستان/منطقه",
+      "مقطع تحصیلی",
+      "نقش در شاد",
+      "تاریخ عضویت"
+    ];
+
+    const escapeCsvValue = (val: any) => {
+      if (val === null || val === undefined) return "";
+      const str = String(val).replace(/"/g, '""');
+      if (str.includes(",") || str.includes("\n") || str.includes('"')) {
+        return `"${str}"`;
+      }
+      return str;
+    };
+
+    let csvContent = cols.map(escapeCsvValue).join(",") + "\n";
+    for (const p of participants) {
+      const row = [
+        p.id,
+        p.name,
+        p.phoneOrEmail || "",
+        p.favoriteTeam || "",
+        p.predictedChampion || "",
+        p.predScore,
+        p.predictionsCount,
+        p.provinceName || "",
+        p.districtName || "",
+        p.courseStudy || "",
+        p.shadRole || "",
+        p.registeredAt || ""
+      ];
+      csvContent += row.map(escapeCsvValue).join(",") + "\n";
+    }
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", "attachment; filename=all_participants.csv");
+    res.write(Buffer.from("\uFEFF", "utf-8"));
+    res.write(Buffer.from(csvContent, "utf-8"));
+    res.end();
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 2. Export Audit Trail / Action Logs as CSV
+app.get("/api/admin/action-logs-csv", async (req, res) => {
+  try {
+    const logs = await dbGetActionLogs();
+    const cols = [
+      "شناسه لاگ",
+      "کاربر",
+      "نوع فعالیت / کلیک",
+      "زمان محلی دستگاه",
+      "زمان ثبت سیستم",
+      "جزئیات اتفاق"
+    ];
+
+    const escapeCsvValue = (val: any) => {
+      if (val === null || val === undefined) return "";
+      const str = String(val).replace(/"/g, '""');
+      if (str.includes(",") || str.includes("\n") || str.includes('"')) {
+        return `"${str}"`;
+      }
+      return str;
+    };
+
+    let csvContent = cols.map(escapeCsvValue).join(",") + "\n";
+    for (const l of logs) {
+      const row = [
+        l.id,
+        l.username,
+        l.action,
+        l.exactTime || "",
+        l.timestamp,
+        l.details || ""
+      ];
+      csvContent += row.map(escapeCsvValue).join(",") + "\n";
+    }
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", "attachment; filename=action_audit_trail.csv");
+    res.write(Buffer.from("\uFEFF", "utf-8"));
+    res.write(Buffer.from(csvContent, "utf-8"));
+    res.end();
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 3. Download Full Combined JSON Backup File
+app.get("/api/admin/backup/download-full", async (req, res) => {
+  try {
+    const participants = await dbGetParticipants();
+    const predictions = await dbGetAllPredictions();
+    const actionLogs = await dbGetActionLogs();
+
+    const backupPayload = {
+      backupVersion: 1,
+      exportedAt: new Date().toISOString(),
+      participants,
+      predictions,
+      actionLogs
+    };
+
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename=world_cup_full_db_backup_${Date.now()}.json`);
+    res.send(JSON.stringify(backupPayload, null, 2));
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 4. List saved timestamped backups
+app.get("/api/admin/backup/list", async (req, res) => {
+  try {
+    ensureBackupsDir();
+    const files = fs.readdirSync(BACKUPS_DIR);
+    const list = files
+      .filter(f => f.startsWith("backup_") && f.endsWith(".json"))
+      .map(f => {
+        const filePath = path.join(BACKUPS_DIR, f);
+        const stats = fs.statSync(filePath);
+        return {
+          filename: f,
+          sizeBytes: stats.size,
+          createdAt: stats.mtime.toISOString()
+        };
+      })
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    res.json({ success: true, backups: list });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 5. Create a new timestamped backup
+app.post("/api/admin/backup/create", async (req, res) => {
+  try {
+    ensureBackupsDir();
+    const participants = await dbGetParticipants();
+    const predictions = await dbGetAllPredictions();
+    const actionLogs = await dbGetActionLogs();
+
+    const backupPayload = {
+      backupVersion: 1,
+      exportedAt: new Date().toISOString(),
+      participants,
+      predictions,
+      actionLogs
+    };
+
+    const dateStr = new Date().toISOString().replace(/[:.]/g, "-");
+    const filename = `backup_${dateStr}.json`;
+    const destPath = path.join(BACKUPS_DIR, filename);
+
+    fs.writeFileSync(destPath, JSON.stringify(backupPayload, null, 2), "utf-8");
+
+    res.json({
+      success: true,
+      filename,
+      sizeBytes: fs.statSync(destPath).size,
+      createdAt: new Date().toISOString()
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 6. Restore from a timestamped backup
+app.post("/api/admin/backup/restore", async (req, res) => {
+  try {
+    const { filename } = req.body;
+    if (!filename) {
+      return res.status(400).json({ error: "نام فایل بک‌آپ ارسال نشده است." });
+    }
+    ensureBackupsDir();
+    const targetPath = path.join(BACKUPS_DIR, filename);
+    if (!fs.existsSync(targetPath)) {
+      return res.status(404).json({ error: "فایل پشتیبان انتخاب شده یافت نشد." });
+    }
+
+    const rawData = fs.readFileSync(targetPath, "utf-8");
+    const parsed = JSON.parse(rawData);
+
+    const participants = parsed.participants || [];
+    const predictions = parsed.predictions || {};
+    const actionLogs = parsed.actionLogs || [];
+
+    await dbRestoreAllBackup(participants, predictions, actionLogs);
+
+    res.json({ success: true, message: "بازگردانی نسخه پشتیبان با موفقیت انجام شد." });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 7. Upload and Restore from manual JSON backup file
+app.post("/api/admin/backup/upload-restore", async (req, res) => {
+  try {
+    const { backupData } = req.body;
+    if (!backupData) {
+      return res.status(400).json({ error: "داده‌های پشتیبان خالی یا نامعتبر بود." });
+    }
+
+    const participants = backupData.participants || [];
+    const predictions = backupData.predictions || {};
+    const actionLogs = backupData.actionLogs || [];
+
+    await dbRestoreAllBackup(participants, predictions, actionLogs);
+
+    res.json({ success: true, message: "فایل پشتیبان با موفقیت بارگذاری و بازیابی شد." });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 8. Delete a backup file
+app.delete("/api/admin/backup/:filename", async (req, res) => {
+  try {
+    const { filename } = req.params;
+    if (!filename) {
+      return res.status(400).json({ error: "نام فایل ارسال نشده است." });
+    }
+    ensureBackupsDir();
+    const targetPath = path.join(BACKUPS_DIR, filename);
+    if (fs.existsSync(targetPath)) {
+      fs.unlinkSync(targetPath);
+    }
+    res.json({ success: true, message: "فایل پشتیبان با موفقیت حذف شد." });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

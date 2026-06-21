@@ -27,13 +27,16 @@ import {
   RefreshCw,
   Terminal,
   Download,
+  Upload,
   FileSpreadsheet,
   Gift,
   Ticket,
   Crown,
   Award,
   Trophy,
-  Search
+  Search,
+  Shield,
+  HardDrive
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { generateGroupMatches, TEAMS, getMatchKickoffDate } from "../data";
@@ -69,8 +72,10 @@ export const AppAdminDashboard: React.FC = () => {
   const [errorText, setErrorText] = useState("");
 
   // Sub-tab navigation
-  const [adminSubTab, setAdminSubTab] = useState<"audit" | "actions" | "analytics" | "raffle">(() => {
-    return (sessionStorage.getItem("admin_dashboard_subtab") as any) || "analytics";
+  const [adminSubTab, setAdminSubTab] = useState<"audit" | "analytics" | "raffle">(() => {
+    const val = sessionStorage.getItem("admin_dashboard_subtab");
+    if (val === "actions") return "analytics";
+    return (val as any) || "analytics";
   });
 
   // Raffle (قرعه‌کشی) state variables
@@ -94,7 +99,6 @@ export const AppAdminDashboard: React.FC = () => {
   const [predictionViewFilter, setPredictionViewFilter] = useState<"all" | "correct_exact" | "correct_outcome" | "incorrect">("all");
   const [predictionSearch, setPredictionSearch] = useState<string>("");
   const [syncNotification, setSyncNotification] = useState<{ text: string; type: "success" | "info" | "error" } | null>(null);
-  const [hasAutoSynced, setHasAutoSynced] = useState<boolean>(false);
 
   const [isDrawing, setIsDrawing] = useState<boolean>(false);
   const [drawnName, setDrawnName] = useState<string>("");
@@ -112,12 +116,19 @@ export const AppAdminDashboard: React.FC = () => {
   const [isSimulatingGroup, setIsSimulatingGroup] = useState<boolean>(false);
   const [isResetting, setIsResetting] = useState<boolean>(false);
 
-  // User Actions Tracking State
+  // Backups & Logs states
   const [actionLogs, setActionLogs] = useState<ActionLog[]>([]);
-  const [loadingLogs, setLoadingLogs] = useState<boolean>(false);
-  const [logsFilter, setLogsFilter] = useState<string>("");
-  const [isAutoRefresh, setIsAutoRefresh] = useState<boolean>(true);
-  const [isClearingLogs, setIsClearingLogs] = useState<boolean>(false);
+  const [backupsList, setBackupsList] = useState<any[]>([]);
+  const [loadingBackups, setLoadingBackups] = useState<boolean>(false);
+  const [isGeneratingBackup, setIsGeneratingBackup] = useState<boolean>(false);
+  const [isRestoringBackup, setIsRestoringBackup] = useState<boolean>(false);
+  const [backupLogsFilter, setBackupLogsFilter] = useState<string>("");
+
+  // Audit tab filters
+  const [auditMinScore, setAuditMinScore] = useState<string>("");
+  const [auditMaxScore, setAuditMaxScore] = useState<string>("");
+  const [auditSearch, setAuditSearch] = useState<string>("");
+  const [auditStatusFilter, setAuditStatusFilter] = useState<string>("all");
 
   // Stats Counters
   const [quickStats, setQuickStats] = useState({
@@ -146,13 +157,17 @@ export const AppAdminDashboard: React.FC = () => {
 
   // Automatic background synchronization when raffle sub-tab is loaded
   useEffect(() => {
-    if (adminSubTab === "raffle" && !hasAutoSynced) {
+    let interval: NodeJS.Timeout | null = null;
+    if (adminSubTab === "raffle") {
       handleAutoSyncWithLiveScoresSilent();
-      setHasAutoSynced(true);
-    } else if (adminSubTab !== "raffle") {
-      setHasAutoSynced(false);
+      interval = setInterval(() => {
+        handleAutoSyncWithLiveScoresSilent();
+      }, 30000);
     }
-  }, [adminSubTab, hasAutoSynced]);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [adminSubTab]);
 
   // Auto-dismiss the notification after 7 seconds
   useEffect(() => {
@@ -163,55 +178,6 @@ export const AppAdminDashboard: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [syncNotification]);
-
-  // Load action logs
-  const fetchActionLogs = async (silent = false) => {
-    if (!silent) setLoadingLogs(true);
-    try {
-      const res = await fetch("/api/action-logs");
-      if (res.ok) {
-        const data = await res.json();
-        setActionLogs(data);
-      }
-    } catch (err) {
-      console.error("Error reading action logs:", err);
-    } finally {
-      if (!silent) setLoadingLogs(false);
-    }
-  };
-
-  // Polling for live action monitoring
-  useEffect(() => {
-    if (isAuthorized && adminSubTab === "actions") {
-      fetchActionLogs();
-      let timer: any = null;
-      if (isAutoRefresh) {
-        timer = setInterval(() => {
-          fetchActionLogs(true);
-        }, 3000); // 3 seconds interval for real-time live monitoring
-      }
-      return () => {
-        if (timer) clearInterval(timer);
-      };
-    }
-  }, [isAuthorized, adminSubTab, isAutoRefresh]);
-
-  const clearAllActionLogs = async () => {
-    if (window.confirm("آیا مایلید کل تاریخچه گزارش تفصیلی فعالیت کاربران را به صورت آنلاین پاکسازی کنید؟")) {
-      setIsClearingLogs(true);
-      try {
-        const res = await fetch("/api/action-logs", { method: "DELETE" });
-        if (res.ok) {
-          setActionLogs([]);
-          alert("کلیه گزارش‌های آنلاین فعالیت کاربران با موفقیت از دیتابیس حذف گردید.");
-        }
-      } catch (err) {
-        alert("خطا در ارتباط با سرور جهت پاکسازی لاگ‌ها.");
-      } finally {
-        setIsClearingLogs(false);
-      }
-    }
-  };
 
   // Load backend data
   const fetchData = async () => {
@@ -239,6 +205,17 @@ export const AppAdminDashboard: React.FC = () => {
         setPredictions(pData);
       }
 
+      // Fetch action logs dynamically
+      try {
+        const logsRes = await fetch("/api/action-logs");
+        if (logsRes.ok) {
+          const logsData = await logsRes.json();
+          setActionLogs(logsData);
+        }
+      } catch (logsErr) {
+        console.error("Error fetching action logs:", logsErr);
+      }
+
       // Fetch manual results
       const manualRes = await fetch("/api/manual-results");
       if (manualRes.ok) {
@@ -261,6 +238,144 @@ export const AppAdminDashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Load and refresh backups list
+  const fetchBackupsList = async () => {
+    setLoadingBackups(true);
+    try {
+      const res = await fetch("/api/admin/backup/list");
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.backups) {
+          setBackupsList(json.backups);
+        }
+      }
+    } catch (err) {
+      console.error("Error reading backups list", err);
+    } finally {
+      setLoadingBackups(false);
+    }
+  };
+
+  // Create a new backup file
+  const handleCreateBackup = async () => {
+    setIsGeneratingBackup(true);
+    try {
+      const res = await fetch("/api/admin/backup/create", { method: "POST" });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) {
+          alert(`✅ نسخه پشتیبان جدید با موفقیت ایجاد گردید:\n${json.filename}`);
+          await fetchBackupsList();
+        } else {
+          alert("❌ خطا در ایجاد نسخه پشتیبان.");
+        }
+      } else {
+          alert("❌ خطا در اتصال به سرور جهت تعریف پشتیبان.");
+      }
+    } catch (err) {
+      console.error("Backup creation failed:", err);
+      alert("❌ خطای غیرمنتظره در ایجاد نسخه پشتیبان.");
+    } finally {
+      setIsGeneratingBackup(false);
+    }
+  };
+
+  // Restore snapshot from list
+  const handleRestoreBackup = async (filename: string) => {
+    if (!confirm(`⚠️ آیا واقعاً مطمئن هستید؟ تمام داده‌های فعلی شما با اطلاعات نسخه پشتیبان (${filename}) جایگزین خواهد شد.`)) {
+      return;
+    }
+    setIsRestoringBackup(true);
+    try {
+      const res = await fetch("/api/admin/backup/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) {
+          alert("✅ بازیابی نسخه پشتیبان انتخاب شده با موفقیت روی سیستم اعمال گردید.");
+          await fetchData();
+        } else {
+          alert("❌ خطا در بازگردانی فایل پشتیبین.");
+        }
+      } else {
+        alert("❌ خطا در برقراری ارتباط با وب‌سرویس بازیابی.");
+      }
+    } catch (err) {
+      console.error("Backup restore failed:", err);
+      alert("❌ خطای سیستمی رخ داد.");
+    } finally {
+      setIsRestoringBackup(false);
+    }
+  };
+
+  // Delete a backup from file folder
+  const handleDeleteBackup = async (filename: string) => {
+    if (!confirm(`آیا از حذف دائم فایل پشتیبان (${filename}) از روی هارد سرور اطمینان دارید؟`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/admin/backup/${filename}`, { method: "DELETE" });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) {
+          alert("✅ نسخه پشتیبان با موفقیت پاک شد.");
+          await fetchBackupsList();
+        }
+      }
+    } catch (err) {
+      console.error("Failed to delete backup file:", err);
+    }
+  };
+
+  // Handle manual backup file restore upload (JSON drag-drop)
+  const handleUploadBackupFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target?.result as string;
+        const parsed = JSON.parse(text);
+        
+        if (!parsed.participants || !parsed.predictions) {
+          alert("❌ ساختار فایل پشتیبان ارسالی نامعتبر است. حتما باید حاوی فیلدهای participants و predictions باشد.");
+          return;
+        }
+
+        if (!confirm("⚠️ فایل با موفقیت اعتبارسنجی شد. آیا بر روی دیتای کل بازنویسی شود؟ کل داده‌های فعلی از بین خواهند رفت.")) {
+          return;
+        }
+
+        setIsRestoringBackup(true);
+        const res = await fetch("/api/admin/backup/upload-restore", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ backupData: parsed })
+        });
+
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success) {
+            alert("🎉 دیتابیس کل سیستم با موفقیت بازیابی و همگام‌سازی گردید.");
+            await fetchData();
+          }
+        } else {
+          alert("❌ خطا در بارگذاری ابری بازیابی.");
+        }
+      } catch (err) {
+        alert("❌ خطای پردازش فایل JSON: ساختار معتبری مشاهده نشد.");
+      } finally {
+        setIsRestoringBackup(false);
+        e.target.value = "";
+      }
+    };
+    reader.readAsText(file);
   };
 
   const handleAutoSyncWithLiveScores = async () => {
@@ -803,6 +918,28 @@ export const AppAdminDashboard: React.FC = () => {
   };
 
   // --- ANALYTICS CALCULATIONS ---
+  // 0. Top Participative and Active Users
+  const topPredictorUser = [...participants]
+    .filter(p => (p.predictionsCount || 0) > 0)
+    .sort((a, b) => b.predictionsCount - a.predictionsCount)[0] || null;
+
+  const actionLogsUserCounts: Record<string, number> = {};
+  actionLogs.forEach(entry => {
+    if (entry.username) {
+      actionLogsUserCounts[entry.username] = (actionLogsUserCounts[entry.username] || 0) + 1;
+    }
+  });
+
+  const topActiveUsername = Object.entries(actionLogsUserCounts)
+    .filter(([user]) => user !== "کاربر مهمان" && user !== "کاربر شاد" && user !== "ناشناس" && user !== "")
+    .sort((a, b) => b[1] - a[1])[0] || Object.entries(actionLogsUserCounts)
+    .sort((a, b) => b[1] - a[1])[0] || null;
+
+  const topActiveParticipant = topActiveUsername 
+    ? participants.find(p => p.name === topActiveUsername[0]) || { name: topActiveUsername[0], phoneOrEmail: "ثبت‌نشده", favoriteTeam: "نامشخص", predScore: 0, predictionsCount: 0 }
+    : null;
+  const topActiveUserCount = topActiveUsername ? topActiveUsername[1] : 0;
+
   // 1. Favorite Team statistics
   const favTeamCounts: Record<string, number> = {};
   participants.forEach(p => {
@@ -931,6 +1068,53 @@ export const AppAdminDashboard: React.FC = () => {
       </div>
     );
   }
+
+  // 1. Audit filtering logic computed at render level
+  const auditFilteredParticipants = participants.filter((p) => {
+    // keyword search
+    if (auditSearch.trim()) {
+      const s = auditSearch.toLowerCase();
+      const nameMatch = (p.name || "").toLowerCase().includes(s);
+      const contactMatch = (p.phoneOrEmail || "").toLowerCase().includes(s);
+      const teamMatch = (p.favoriteTeam || "").toLowerCase().includes(s);
+      const champMatch = (p.predictedChampion || "").toLowerCase().includes(s);
+      const provMatch = (p.provinceName || "").toLowerCase().includes(s);
+      const distMatch = (p.districtName || "").toLowerCase().includes(s);
+      const idMatch = (p.id || "").toLowerCase().includes(s);
+      
+      if (!nameMatch && !contactMatch && !teamMatch && !champMatch && !provMatch && !distMatch && !idMatch) {
+        return false;
+      }
+    }
+
+    // Min score
+    if (auditMinScore.trim()) {
+      const min = parseInt(auditMinScore, 10);
+      if (!isNaN(min) && (p.predScore || 0) < min) {
+        return false;
+      }
+    }
+
+    // Max score
+    if (auditMaxScore.trim()) {
+      const max = parseInt(auditMaxScore, 10);
+      if (!isNaN(max) && (p.predScore || 0) > max) {
+        return false;
+      }
+    }
+
+    // Status
+    if (auditStatusFilter !== "all") {
+      if (auditStatusFilter === "published" && !p.isPublished) return false;
+      if (auditStatusFilter === "pending" && p.isPublished) return false;
+    }
+
+    return true;
+  });
+
+  const auditFilteredCount = auditFilteredParticipants.length;
+  const auditAggregateSum = auditFilteredParticipants.reduce((acc, p) => acc + (p.predScore || 0), 0);
+  const auditAvgScoreFiltered = auditFilteredCount > 0 ? (auditAggregateSum / auditFilteredCount).toFixed(1) : "0";
 
   return (
     <div className="space-y-6 text-right font-sans" dir="rtl">
@@ -1130,24 +1314,6 @@ export const AppAdminDashboard: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={() => setAdminSubTab("actions")}
-                className={`pb-3 px-4 font-black text-xs duration-150 cursor-pointer border-b-2 transition-all flex items-center gap-2 relative outline-none ${
-                  adminSubTab === "actions"
-                    ? "border-indigo-500 text-indigo-400"
-                    : "border-transparent text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                {adminSubTab === "actions" && (
-                  <span className="relative flex h-1.5 w-1.5 font-bold">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-indigo-500"></span>
-                  </span>
-                )}
-                <Activity size={13} className={adminSubTab === "actions" ? "text-indigo-400" : "text-slate-400"} />
-                <span>ردگیری زنده‌ کلیک‌ها و فعالیت کاربران ({actionLogs.length})</span>
-              </button>
-              <button
-                type="button"
                 onClick={() => setAdminSubTab("raffle")}
                 className={`pb-3 px-4 font-black text-xs duration-150 cursor-pointer border-b-2 transition-all flex items-center gap-2 outline-none ${
                   adminSubTab === "raffle"
@@ -1157,6 +1323,18 @@ export const AppAdminDashboard: React.FC = () => {
               >
                 <Gift size={13} className={adminSubTab === "raffle" ? "text-emerald-400" : "text-slate-400"} />
                 <span>برگزاری قرعه‌کشی شادکیو (مسابقات و قهرمان 🎁)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setAdminSubTab("backup")}
+                className={`pb-3 px-4 font-black text-xs duration-150 cursor-pointer border-b-2 transition-all flex items-center gap-2 outline-none ${
+                  adminSubTab === "backup"
+                    ? "border-sky-500 text-sky-400"
+                    : "border-transparent text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <Shield size={13} className={adminSubTab === "backup" ? "text-sky-400" : "text-slate-400"} />
+                <span>ایمنی و انتقال داده‌ها (پشتیبان‌گیری 🛡️)</span>
               </button>
             </div>
 
@@ -1186,6 +1364,71 @@ export const AppAdminDashboard: React.FC = () => {
                     <FileSpreadsheet size={15} className="animate-pulse" />
                     <span>خروجی اکسل (CSV) پیش‌بینی‌ها</span>
                   </button>
+                </div>
+
+                {/* 👑 USER SPOTLIGHTS: MOST PREDICTIONS & MOST ACTIVE */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Top Predictor Spotlight */}
+                  <div className="relative overflow-hidden rounded-2xl border border-amber-500/10 bg-slate-950/40 p-5 shrink-0 hover:border-amber-500/20 transition-all duration-150">
+                    <div className="absolute top-3 left-3 p-1 text-amber-500">
+                      <Crown size={18} className="animate-pulse" />
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <div className="p-3 bg-amber-500/10 text-amber-400 rounded-xl">
+                        <Trophy size={18} />
+                      </div>
+                      <div className="flex-1 space-y-1 text-right">
+                        <div className="flex items-center gap-1.5 justify-end">
+                          <span className="text-[9px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-lg font-black">شاخص‌ترین پیش‌بینی‌کننده (تعداد مسابقات ثبت شده)</span>
+                        </div>
+                        {topPredictorUser ? (
+                          <>
+                            <h4 className="text-sm font-black text-slate-100 mt-1">{topPredictorUser.name}</h4>
+                            <p className="text-[10px] text-slate-400">
+                              شماره تماس/ایمیل: <span className="font-mono">{topPredictorUser.phoneOrEmail || "ثبت نشده"}</span>
+                            </p>
+                            <div className="mt-3 flex items-center justify-between text-xs pt-2 border-t border-white/5 font-mono">
+                              <span className="text-indigo-400 font-bold bg-indigo-500/5 px-2 py-0.5 rounded-lg text-[10px]">{topPredictorUser.favoriteTeam || "نامشخص"}</span>
+                              <span className="text-amber-400 font-black">{topPredictorUser.predictionsCount || 0} بازی پیش‌بینی‌شده</span>
+                            </div>
+                          </>
+                        ) : (
+                          <p className="text-xs text-slate-500 pt-2">اطلاعاتی در دست نیست.</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Top Active User Spotlight */}
+                  <div className="relative overflow-hidden rounded-2xl border border-teal-500/10 bg-slate-950/40 p-5 shrink-0 hover:border-teal-500/20 transition-all duration-150">
+                    <div className="absolute top-3 left-3 p-1 text-teal-400">
+                      <Zap size={18} className="animate-pulse" />
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <div className="p-3 bg-teal-500/10 text-teal-400 rounded-xl font-black">
+                        <Flame size={18} />
+                      </div>
+                      <div className="flex-1 space-y-1 text-right">
+                        <div className="flex items-center gap-1.5 justify-end">
+                          <span className="text-[9px] bg-teal-500/10 text-teal-400 px-2 py-0.5 rounded-lg font-black">فعال‌ترین کاربر اپ (کلیک‌ها و تعامل فرانت)</span>
+                        </div>
+                        {topActiveParticipant ? (
+                          <>
+                            <h4 className="text-sm font-black text-slate-100 mt-1">{topActiveParticipant.name}</h4>
+                            <p className="text-[10px] text-slate-400">
+                              شماره تماس/ایمیل: <span className="font-mono">{topActiveParticipant.phoneOrEmail || "ثبت نشده"}</span>
+                            </p>
+                            <div className="mt-3 flex items-center justify-between text-xs pt-2 border-t border-white/5 font-mono">
+                              <span className="text-slate-400 text-[10px]">نمره کاربری: {topActiveParticipant.predScore || 0} pts</span>
+                              <span className="text-teal-400 font-black">{topActiveUserCount || 0} فعالیت فعال کلیکی</span>
+                            </div>
+                          </>
+                        ) : (
+                          <p className="text-xs text-slate-500 pt-2">لاگ فعالیتی هنوز در سرور ذخیره نشده است.</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Score Dist & Top Predictors section */}
@@ -1421,119 +1664,291 @@ export const AppAdminDashboard: React.FC = () => {
               </div>
             ) : adminSubTab === "audit" ? (
               // TAB 2: AUDITTING INTERFACE
-              <div className="space-y-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-4">
-                  <div className="space-y-1">
-                    <h4 className="text-sm font-black text-slate-100 flex items-center gap-2">
-                       <Grid size={15} className="text-pink-400" />
-                      <span>بررسی و انتشار پرونده شرکت‌کنندگان معلق</span>
-                    </h4>
-                    <p className="text-slate-400 text-[10px] sm:text-xs">
-                      در این میز کار بررسی، پرونده کاربرانی که به پلتفرم ارسال شده نمایش داده می‌شود. می‌توانید تاییدیه انتشار آنلاین صادر کنید.
-                    </p>
-                  </div>
+              <div className="space-y-6 text-right" dir="rtl">
+                  
+                  {/* Tab Title and Universal Audit Controls */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-4">
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-black text-slate-100 flex items-center gap-2">
+                        <Grid size={15} className="text-pink-400" />
+                        <span>بررسی و انتشار پرونده شرکت‌کنندگان معلق</span>
+                      </h4>
+                      <p className="text-slate-400 text-[10px] sm:text-xs">
+                        در این میز کار بررسی، پرونده کاربرانی که به پلتفرم ارسال شده نمایش داده می‌شود. می‌توانید تاییدیه انتشار آنلاین صادر کنید.
+                      </p>
+                    </div>
 
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={downloadPredictionsCsv}
-                      className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-emerald-400 font-extrabold text-xs duration-150 cursor-pointer border border-emerald-500/20 shadow flex items-center gap-1.5 transition-all active:scale-95"
-                    >
-                      <FileSpreadsheet size={13} />
-                      <span>دانلود اکسل پیش‌بینی‌ها</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={approveAllPending}
-                      className="px-4 py-2 rounded-xl bg-pink-500 hover:bg-pink-600 text-white font-black text-xs duration-150 cursor-pointer shadow-lg shadow-pink-500/10 flex items-center gap-1 active:scale-95 transition-all"
-                    >
-                      <Check size={12} />
-                      <span>انتشار سراسری همه معلق‌ها</span>
-                    </button>
-                  </div>
-                </div>
-
-                {loading ? (
-                  <div className="py-12 text-center space-y-2">
-                    <div className="mx-auto h-8 w-8 border-2 border-indigo-500/10 border-t-indigo-500 rounded-full animate-spin"></div>
-                    <p className="text-slate-400 text-xs font-bold animate-pulse">درحال فراخوانی لیست پرونده‌ها...</p>
-                  </div>
-                ) : participants.length === 0 ? (
-                  <div className="py-12 text-center text-slate-500 text-xs">
-                    هیچ شرکت‌کننده‌ای جهت مانیتور روی دیتابیس یافت نشد.
-                  </div>
-                ) : (
-                  <div className="space-y-2.5 max-h-[460px] overflow-y-auto pr-1">
-                    {participants.map((p) => (
-                      <div 
-                        key={p.id}
-                        className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
-                          p.isPublished 
-                            ? "bg-slate-950/20 border-white/5" 
-                            : "bg-amber-500/[0.02] border-amber-500/15"
-                        }`}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={downloadPredictionsCsv}
+                        className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-755 text-emerald-400 font-extrabold text-xs duration-150 cursor-pointer border border-emerald-500/20 shadow flex items-center gap-1.5 transition-all active:scale-95 outline-none"
                       >
-                        <div className="flex items-start gap-3">
-                          <div className={`p-2.5 rounded-xl border flex-shrink-0 ${
+                        <FileSpreadsheet size={13} />
+                        <span>دانلود اکسل پیش‌بینی‌ها</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={approveAllPending}
+                        className="px-4 py-2 rounded-xl bg-pink-500 hover:bg-pink-600 text-white font-black text-xs duration-150 cursor-pointer shadow-lg shadow-pink-500/10 flex items-center gap-1 active:scale-95 transition-all outline-none"
+                      >
+                        <Check size={12} />
+                        <span>انتشار سراسری همه معلق‌ها</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 🔍 FILTER ENGINE PANEL */}
+                  <div className="p-5 bg-slate-950/30 rounded-2xl border border-white/5 space-y-4">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-white/5 pb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 rounded-lg bg-pink-500/10 text-pink-400">
+                          <Search size={14} />
+                        </div>
+                        <h5 className="text-xs font-black text-slate-200">فیلترهای پیشرفته و پایش هوشمند رتبه‌ها</h5>
+                      </div>
+                      
+                      {/* Dynamic aggregate indicators */}
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <div className="flex items-center gap-1.5 bg-pink-500/15 border border-pink-500/20 px-3 py-1 rounded-full text-pink-300 font-black text-[10px]">
+                          <span>شرکت‌کنندگان فیلترشده:</span>
+                          <span className="font-mono text-xs">{auditFilteredCount} نفر</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 bg-amber-500/15 border border-amber-500/20 px-3 py-1 rounded-full text-amber-300 font-black text-[10px]">
+                          <span>میانگین امتیاز فیلترشده‌ها:</span>
+                          <span className="font-mono text-xs">{auditAvgScoreFiltered} pts</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                      {/* Search box tool */}
+                      <div className="space-y-1.5 text-right">
+                        <label className="text-[10px] font-black text-slate-400 block">جستجوی کلمه کلیدی</label>
+                        <input
+                          type="text"
+                          placeholder="نام، ایمیل، استان، تیم و..."
+                          value={auditSearch}
+                          onChange={(e) => setAuditSearch(e.target.value)}
+                          className="w-full bg-slate-900/80 border border-white/10 rounded-xl px-3 py-2 text-xs font-bold text-slate-200 placeholder-slate-600 outline-none focus:border-pink-500/40 text-right"
+                        />
+                      </div>
+
+                      {/* Dropdown Score Level Presets (Requested / "مثلاً کسانی که بیش از ۸۰ امتیاز دارند") */}
+                      <div className="space-y-1.5 text-right">
+                        <label className="text-[10px] font-black text-slate-400 block">رول رتبه‌بندی امتیازات</label>
+                        <select
+                          value={
+                            auditMinScore === "80" && auditMaxScore === "" ? "over_80" :
+                            auditMinScore === "60" && auditMaxScore === "79" ? "60_79" :
+                            auditMinScore === "30" && auditMaxScore === "59" ? "30_59" :
+                            auditMinScore === "0" && auditMaxScore === "29" ? "under_30" : "custom"
+                          }
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === "all") {
+                              setAuditMinScore("");
+                              setAuditMaxScore("");
+                            } else if (val === "over_80") {
+                              setAuditMinScore("80");
+                              setAuditMaxScore("");
+                            } else if (val === "60_79") {
+                              setAuditMinScore("60");
+                              setAuditMaxScore("79");
+                            } else if (val === "30_59") {
+                              setAuditMinScore("30");
+                              setAuditMaxScore("59");
+                            } else if (val === "under_30") {
+                              setAuditMinScore("0");
+                              setAuditMaxScore("29");
+                            }
+                          }}
+                          className="w-full bg-slate-900/80 border border-white/10 rounded-xl px-3 py-2 text-xs font-bold text-slate-200 outline-none focus:border-pink-500/40 text-right cursor-pointer"
+                        >
+                          <option value="custom">سفارشی / بر اساس مقدار دستی</option>
+                          <option value="all">همه بازه‌ها</option>
+                          <option value="over_80">امتیاز عالی (بیش از ۸۰) 🏆</option>
+                          <option value="60_79">امتیاز بالا (۶۰ تا ۷۹)</option>
+                          <option value="30_59">امتیاز متوسط (۳۰ تا ۵۹)</option>
+                          <option value="under_30">امتیاز پایین (زیر ۳۰)</option>
+                        </select>
+                      </div>
+
+                      {/* Custom Minimum check */}
+                      <div className="space-y-1.5 text-right">
+                        <label className="text-[10px] font-black text-slate-400 block">حداقل امتیاز (مثلاً ۸۰)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="200"
+                          placeholder="کف امتیاز"
+                          value={auditMinScore}
+                          onChange={(e) => setAuditMinScore(e.target.value)}
+                          className="w-full bg-slate-900/80 border border-white/10 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-200 placeholder-slate-600 outline-none focus:border-pink-500/40 text-right"
+                        />
+                      </div>
+
+                      {/* Custom Maximum check */}
+                      <div className="space-y-1.5 text-right">
+                        <label className="text-[10px] font-black text-slate-400 block">حداکثر امتیاز</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="200"
+                          placeholder="سقف امتیاز"
+                          value={auditMaxScore}
+                          onChange={(e) => setAuditMaxScore(e.target.value)}
+                          className="w-full bg-slate-900/80 border border-white/10 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-200 placeholder-slate-600 outline-none focus:border-pink-500/40 text-right"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Reset filter buttons */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 text-xs">
+                      <div className="flex gap-2 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => setAuditStatusFilter("all")}
+                          className={`px-3 py-1.5 rounded-lg border text-[10px] font-bold duration-150 cursor-pointer outline-none ${
+                            auditStatusFilter === "all"
+                              ? "bg-pink-500/20 border-pink-500/30 text-pink-300"
+                              : "bg-slate-900 border-white/5 text-slate-400 hover:text-slate-200"
+                          }`}
+                        >
+                          همه وضعیت‌ها
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAuditStatusFilter("published")}
+                          className={`px-3 py-1.5 rounded-lg border text-[10px] font-bold duration-150 cursor-pointer outline-none ${
+                            auditStatusFilter === "published"
+                              ? "bg-emerald-500/20 border-emerald-500/30 text-emerald-300"
+                              : "bg-slate-900 border-white/5 text-slate-400 hover:text-slate-200"
+                          }`}
+                        >
+                          🟢 منتشر شده (جدول عمومی)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAuditStatusFilter("pending")}
+                          className={`px-3 py-1.5 rounded-lg border text-[10px] font-bold duration-150 cursor-pointer outline-none ${
+                            auditStatusFilter === "pending"
+                              ? "bg-amber-500/20 border-amber-500/30 text-amber-300"
+                              : "bg-slate-900 border-white/5 text-slate-400 hover:text-slate-200"
+                          }`}
+                        >
+                          🟡 معلق یا پیش‌نویس
+                        </button>
+                      </div>
+
+                      {(auditSearch || auditMinScore || auditMaxScore || auditStatusFilter !== "all") && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAuditSearch("");
+                            setAuditMinScore("");
+                            setAuditMaxScore("");
+                            setAuditStatusFilter("all");
+                          }}
+                          className="text-pink-400 hover:text-pink-300 font-bold text-[10px] flex items-center gap-1 underline cursor-pointer duration-150 outline-none"
+                        >
+                          حذف کلیه فیلترها و نمایش همه 🗑️
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Main content list renderer */}
+                  {loading ? (
+                    <div className="py-12 text-center space-y-2">
+                      <div className="mx-auto h-8 w-8 border-2 border-indigo-500/10 border-t-indigo-500 rounded-full animate-spin"></div>
+                      <p className="text-slate-400 text-xs font-bold animate-pulse">درحال فراخوانی لیست پرونده‌ها...</p>
+                    </div>
+                  ) : participants.length === 0 ? (
+                    <div className="py-12 text-center text-slate-500 text-xs bg-slate-950/20 rounded-2xl border border-white/5">
+                      هیچ شرکت‌کننده‌ای جهت مانیتور روی دیتابیس یافت نشد.
+                    </div>
+                  ) : auditFilteredParticipants.length === 0 ? (
+                    <div className="py-12 text-center text-slate-500 text-xs bg-slate-950/20 rounded-2xl border border-dashed border-white/10">
+                      هیچ شرکت‌کننده‌ای با معیارهای فیلتر فعلی (کف امتیاز: {auditMinScore || "نامحدود"}، سقف امتیاز: {auditMaxScore || "نامحدود"}، کلمه کلیدی: {auditSearch || "خالی"}) پیدا نشد.
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5 max-h-[460px] overflow-y-auto pr-1">
+                      {auditFilteredParticipants.map((p) => (
+                        <div 
+                          key={p.id}
+                          className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
                             p.isPublished 
-                              ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" 
-                              : "bg-amber-500/10 border-amber-500/20 text-amber-500"
-                          }`}>
-                            <Users size={16} />
-                          </div>
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-xs font-black text-slate-100">{p.name}</span>
-                              <span className="text-[9px] font-bold text-indigo-300 bg-indigo-500/10 px-2 py-0.5 rounded">
-                                {p.favoriteTeam}
-                              </span>
-                              <span className="text-[9px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded">
-                                قهرمان: {p.predictedChampion}
-                              </span>
+                              ? "bg-slate-950/20 border-white/5 hover:border-white/10" 
+                              : "bg-amber-500/[0.02] border-amber-500/15 hover:border-amber-500/25"
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className={`p-2.5 rounded-xl border flex-shrink-0 ${
+                              p.isPublished 
+                                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" 
+                                : "bg-amber-500/10 border-amber-500/20 text-amber-500"
+                            }`}>
+                              <Users size={16} />
                             </div>
-                            <div className="flex items-center gap-3 text-[10px] text-slate-500 font-bold">
-                              <span>امتیاز کارشناسی: <strong className="text-slate-350">{p.predScore} pts</strong></span>
-                              <span>•</span>
-                              <span>ثبت: {p.registeredAt || "۱۴۰۵/۰۳/۱۵"}</span>
-                              {p.phoneOrEmail && (
-                                <>
-                                  <span>•</span>
-                                  <span className="font-mono text-slate-400" dir="ltr">{p.phoneOrEmail}</span>
-                                </>
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-xs font-black text-slate-100">{p.name}</span>
+                                <span className="text-[9px] font-bold text-indigo-300 bg-indigo-500/10 px-2 py-0.5 rounded">
+                                  {p.favoriteTeam}
+                                </span>
+                                <span className="text-[9px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded">
+                                  قهرمان: {p.predictedChampion}
+                                </span>
+                                {p.provinceName && (
+                                  <span className="text-[9px] font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded">
+                                    {p.provinceName}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-3 text-[10px] text-slate-500 font-bold flex-wrap">
+                                <span>امتیاز کارشناسی: <span className="text-amber-400 font-black font-semibold">{p.predScore} pts</span></span>
+                                <span>•</span>
+                                <span>ثبت: {p.registeredAt || "۱۴۰۵/۰۳/۱۵"}</span>
+                                {p.phoneOrEmail && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="font-mono text-slate-400" dir="ltr">{p.phoneOrEmail}</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 justify-end">
+                            <div className="text-[10px] font-black pl-2">
+                              {p.isPublished ? (
+                                <span className="text-emerald-400 flex items-center gap-1 bg-emerald-500/5 px-2.5 py-1 rounded-lg border border-emerald-500/10">
+                                  🟢 منتشر شده جدول عمومی
+                                </span>
+                              ) : (
+                                <span className="text-amber-400 flex items-center gap-1 bg-amber-500/5 px-2.5 py-1 rounded-lg border border-amber-500/10">
+                                  🟡 پیش‌نویس موقت
+                                </span>
                               )}
                             </div>
-                          </div>
-                        </div>
 
-                        <div className="flex items-center gap-2 justify-end">
-                          <div className="text-[10px] font-black pl-2">
-                            {p.isPublished ? (
-                              <span className="text-emerald-400 flex items-center gap-1 bg-emerald-500/5 px-2.5 py-1 rounded-lg border border-emerald-500/10">
-                                🟢 منتشر شده جدول عمومی
-                              </span>
-                            ) : (
-                              <span className="text-amber-400 flex items-center gap-1 bg-amber-500/5 px-2.5 py-1 rounded-lg border border-amber-500/10">
-                                🟡 پیش‌نویس موقت
-                              </span>
-                            )}
+                            <button
+                              onClick={() => togglePublishDirect(p)}
+                              className={`px-3 py-1.5 rounded-lg border text-[10px] font-black cursor-pointer duration-100 flex items-center gap-1 outline-none ${
+                                p.isPublished 
+                                  ? "bg-slate-900 border-white/5 text-slate-400 hover:text-white" 
+                                  : "bg-emerald-500/20 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/30"
+                              }`}
+                            >
+                              {p.isPublished ? "لغو انتشار" : "تایید انتشار"}
+                            </button>
                           </div>
 
-                          <button
-                            onClick={() => togglePublishDirect(p)}
-                            className={`px-3 py-1.5 rounded-lg border text-[10px] font-black cursor-pointer duration-100 flex items-center gap-1 ${
-                              p.isPublished 
-                                ? "bg-slate-900 border-white/5 text-slate-400 hover:text-white" 
-                                : "bg-emerald-500/20 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/30"
-                            }`}
-                          >
-                            {p.isPublished ? "لغو انتشار" : "تایید انتشار"}
-                          </button>
                         </div>
-
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  )}
 
                 <div className="p-4 bg-slate-950/40 rounded-2xl border border-white/5 flex gap-3 text-slate-400 text-xs">
                   <HelpCircle size={16} className="text-pink-400 flex-shrink-0 mt-0.5" />
@@ -1544,190 +1959,6 @@ export const AppAdminDashboard: React.FC = () => {
                     </p>
                   </div>
                 </div>
-              </div>
-            ) : adminSubTab === "actions" ? (
-              // TAB 3: ACTION MONITORING LOGS
-              <div className="space-y-4">
-                
-                {/* Control bar for Online Live Track Monitor */}
-                <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-slate-950/40 p-4 rounded-2xl border border-white/5">
-                  <div className="relative flex-1">
-                    <input
-                      type="text"
-                      placeholder="جستجو در اسم کاربری یا نوع کلیک..."
-                      value={logsFilter}
-                      onChange={(e) => setLogsFilter(e.target.value)}
-                      className="w-full bg-slate-900 border border-white/5 rounded-xl px-4 py-2 text-xs font-bold text-slate-200 outline-none focus:border-indigo-500/50"
-                    />
-                    {logsFilter && (
-                      <button
-                        onClick={() => setLogsFilter("")}
-                        className="absolute left-2.5 top-2.5 text-slate-500 hover:text-slate-300 cursor-pointer"
-                      >
-                        <X size={14} />
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    
-                    <button
-                      type="button"
-                      onClick={() => setIsAutoRefresh(!isAutoRefresh)}
-                      className={`px-3 py-1.5 rounded-xl text-[10px] font-black cursor-pointer border transition-all flex items-center gap-1.5 ${
-                        isAutoRefresh
-                          ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                          : "bg-slate-900/80 border-white/5 text-slate-400"
-                      }`}
-                    >
-                      <span className={`h-1.5 w-1.5 rounded-full ${isAutoRefresh ? "bg-emerald-400 animate-pulse" : "bg-slate-600"}`}></span>
-                      <span>بروزرسانی زنده (۳ ثانیه): {isAutoRefresh ? "فعال" : "غیرفعال"}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => fetchActionLogs()}
-                      disabled={loadingLogs}
-                      className="p-2 rounded-xl bg-slate-900 border border-white/10 hover:bg-slate-850 text-slate-350 disabled:opacity-50 cursor-pointer"
-                      title="بروزرسانی دستی"
-                    >
-                      <RefreshCw size={12} className={loadingLogs ? "animate-spin" : ""} />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={clearAllActionLogs}
-                      disabled={isClearingLogs}
-                      className="px-3 py-1.5 rounded-xl bg-rose-500/15 border border-rose-500/20 hover:bg-rose-500/25 text-rose-300 font-bold text-[10px] cursor-pointer flex items-center gap-1"
-                    >
-                      <Trash2 size={11} />
-                      <span>پاکسازی کل لاگ‌ها</span>
-                    </button>
-
-                  </div>
-                </div>
-
-                {/* Logs terminal box */}
-                {loadingLogs && actionLogs.length === 0 ? (
-                  <div className="py-12 text-center space-y-2">
-                    <div className="mx-auto h-8 w-8 border-2 border-indigo-500/10 border-t-indigo-500 rounded-full animate-spin"></div>
-                    <p className="text-slate-400 text-xs font-bold animate-pulse">درحال دانلود گزارش فعالیت‌های جدید...</p>
-                  </div>
-                ) : actionLogs.length === 0 ? (
-                  <div className="py-12 text-center text-slate-500 text-xs border border-dashed border-white/5 bg-slate-950/20 rounded-2xl">
-                    هیچ فعالیتی ثبت نگردیده است. در بخش‌ها و تب‌ها حرکت کنید تا ردگیری به صورت آنلاین ثبت شود!
-                  </div>
-                ) : actionLogs.filter(l => 
-                  l.username.toLowerCase().includes(logsFilter.toLowerCase()) || 
-                  l.action.toLowerCase().includes(logsFilter.toLowerCase())
-                ).length === 0 ? (
-                  <div className="py-12 text-center text-slate-500 text-xs border border-dashed border-white/5 bg-slate-950/20 rounded-2xl">
-                    گزارشی مطابق با فیلتر جستجو یافت نشد.
-                  </div>
-                ) : (
-                  <div className="space-y-2 max-h-[460px] overflow-y-auto pr-1">
-                    {actionLogs
-                      .filter(l => 
-                        l.username.toLowerCase().includes(logsFilter.toLowerCase()) || 
-                        l.action.toLowerCase().includes(logsFilter.toLowerCase())
-                      )
-                      .map((log) => {
-                        // Time calculation helper
-                        const getTimestampDisplay = (isoStr: string) => {
-                          try {
-                            const date = new Date(isoStr);
-                            const tStr = date.toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-                            const diff = Date.now() - date.getTime();
-                            const secs = Math.floor(diff / 1000);
-                            const mins = Math.floor(secs / 60);
-                            
-                            let relative = "";
-                            if (secs < 12) {
-                              relative = "همین الان";
-                            } else if (secs < 60) {
-                              relative = `${secs} ثانیه پیش`;
-                            } else if (mins < 60) {
-                              relative = `${mins} دقیقه پیش`;
-                            } else {
-                              relative = date.toLocaleDateString("fa-IR");
-                            }
-                            return { tStr, relative };
-                          } catch {
-                            return { tStr: isoStr, relative: "" };
-                          }
-                        };
-                        const { tStr, relative } = getTimestampDisplay(log.timestamp);
-                        const displayTime = log.exactTime || tStr;
-                        
-                        // Action styling helper with extremely high-contrast and readable colours
-                        const getBadgeStyle = (txt: string) => {
-                          const actionLower = txt.toLowerCase();
-                          if (actionLower.includes("پیش‌بینی") || actionLower.includes("حذفی") || actionLower.includes("قهرمان")) {
-                            return "text-amber-400 bg-amber-500/15 border-amber-500/35 font-extrabold";
-                          }
-                          if (actionLower.includes("تیم محبوب") || actionLower.includes("نام کاربری") || actionLower.includes("مشخصات") || actionLower.includes("پروفایل")) {
-                            return "text-cyan-300 bg-cyan-500/15 border-cyan-500/35 font-extrabold";
-                          }
-                          if (actionLower.includes("مشاهده بخش") || actionLower.includes("کلیک روی میانبر")) {
-                            return "text-purple-400 bg-purple-500/15 border-purple-500/35 font-extrabold";
-                          }
-                          if (actionLower.includes("طبل") || actionLower.includes("شیپور") || actionLower.includes("شعار") || actionLower.includes("کلوپ")) {
-                            return "text-emerald-400 bg-emerald-500/15 border-emerald-500/35 font-extrabold";
-                          }
-                          if (actionLower.includes("شبیه‌سازی")) {
-                            return "text-sky-400 bg-sky-500/15 border-sky-500/35 font-extrabold";
-                          }
-                          if (actionLower.includes("پاکسازی") || actionLower.includes("حذف") || actionLower.includes("غیرفعال")) {
-                            return "text-rose-400 bg-rose-500/15 border-rose-500/35 font-extrabold";
-                          }
-                          return "text-slate-200 bg-slate-800/40 border-slate-700/30 font-bold";
-                        };
-
-                        return (
-                          <div 
-                            key={log.id}
-                            className="p-3.5 rounded-2xl bg-slate-900/95 border border-slate-850 hover:border-slate-700/50 hover:bg-slate-950/90 transition-all text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-right"
-                          >
-                            <div className="flex items-start gap-2.5 min-w-0">
-                              <span className="text-base select-none mt-0.5" role="img">⚡</span>
-                              <div className="min-w-0 space-y-1">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="text-[10px] font-black text-indigo-300 bg-indigo-500/15 px-2 py-0.5 rounded border border-indigo-500/30 shrink-0">
-                                    {log.username || "مهمان بی‌نام"}
-                                  </span>
-                                  <span className={`text-[11px] px-2 py-0.5 rounded border ${getBadgeStyle(log.action)}`}>
-                                    {log.action}
-                                  </span>
-                                </div>
-                                {log.details && (
-                                  <div className="text-[10px] text-slate-300 font-mono bg-slate-950/80 px-2.5 py-1 rounded border border-white/5 break-all inline-block max-w-full">
-                                    {typeof log.details === "object" ? JSON.stringify(log.details) : String(log.details)}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="flex sm:flex-col items-end shrink-0 justify-between sm:justify-center text-slate-400 text-[10px] font-bold">
-                              <span className="text-pink-400 font-mono text-[11px] font-black" dir="ltr">⏱️ {displayTime}</span>
-                              <span className="text-slate-450 font-sans mt-0.5 text-[9px]">{relative}</span>
-                            </div>
-
-                          </div>
-                        );
-                      })}
-                  </div>
-                )}
-
-                <div className="p-4 bg-indigo-950/10 rounded-2xl border border-indigo-500/10 flex gap-3 text-slate-400 text-xs">
-                  <Terminal size={16} className="text-indigo-400 flex-shrink-0 mt-0.5" />
-                  <div className="space-y-1 leading-relaxed">
-                    <p className="font-bold text-indigo-300">سیاهه ردگیری گشت‌زنی زنده کاربران:</p>
-                    <p className="text-[11px]">
-                      سیستم هوشمند به کار رفته کلیک‌های منو، ثبت و تغییر پیش‌بینی‌ها، افکت‌های صوتی کادوی نوجوان، طبل‌ها، تغییر نام کاربری و تنظیم تیم‌های محبوب کاربران را به صورت غیرهمگام دریافت کرده و نمایش می‌دهد. فواصل بروزرسانی ۳ ثانیه تنظیم شده است.
-                    </p>
-                  </div>
-                </div>
-
               </div>
             ) : adminSubTab === "raffle" ? (
               // TAB 4: COMPREHENSIVE RAFFLE AND DRAW SYSTEM (requested)
@@ -1773,22 +2004,6 @@ export const AppAdminDashboard: React.FC = () => {
                     <p className="text-slate-400 text-[10px] sm:text-xs">
                       برگزاری قرعه‌کشی هوشمند عادلانه میان کسانی که بازی را درست حدس زده‌اند و استعلام مشخصات زنده آنها از شبکه شاد.
                     </p>
-                  </div>
-
-                  <div className="flex items-center gap-2 justify-end">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setRaffleWinner(null);
-                        setShadApiDetails(null);
-                        setShadError(null);
-                        fetchData();
-                      }}
-                      className="px-3.5 py-1.5 rounded-xl bg-slate-900 border border-white/10 hover:bg-slate-800 text-slate-305 font-extrabold text-xs duration-150 cursor-pointer flex items-center gap-1.5 transition-all outline-none"
-                    >
-                      <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
-                      <span>بروزرسانی داده‌ها</span>
-                    </button>
                   </div>
                 </div>
 
@@ -2525,6 +2740,207 @@ export const AppAdminDashboard: React.FC = () => {
                     <p className="font-bold text-emerald-350">مستند فنی قرعه‌کشی و الگوریتم تصادفی عادلانه:</p>
                     <p className="text-[11px]">
                       این ابزار با دریافت دیتای زنده پیش‌بینی‌ها از بستر وب‌سرویس و دیتابیس، واجدان شرایط قرعه‌کشی را فیلتر می‌کند. با فشردن دکمه برگزاری زنده، با کمک الگوریتم تصادفی عادلانه و غیر متبوع، یک کارت قرعه انتخاب شده و بلافاصله مشخصات هویتی و ثبت تماسی برنده به منظور صحت‌سنجی از وب‌سرویس اختصاصی وزارت‌خانه شاد استعلام و نمایش داده می‌شود.
+                    </p>
+                  </div>
+                </div>
+
+              </div>
+            ) : adminSubTab === "backup" ? (
+              // TAB 5: INTEGRATED SAFETY, BACKUPS, RECOVERY & EXPORT PANEL
+              <div className="space-y-6 text-right animate-fadeIn" dir="rtl">
+                
+                {/* Headers and summary */}
+                <div className="bg-gradient-to-r from-sky-500/10 to-blue-500/10 border border-sky-500/10 p-5 rounded-2xl space-y-2">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-xl bg-sky-500/15 text-sky-400 shrink-0">
+                      <Shield size={20} className="animate-pulse" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-slate-100">پنل امنیت، حراست و پشتیبان‌گیری چندگانه داده‌ها</h4>
+                      <p className="text-slate-400 text-xs leading-relaxed mt-1">
+                        با کمک ابزارهای این بخش می‌توانید از ریز کل اطلاعات دیتابیس (شامل اطلاعات شرکت‌کنندگان، پیش‌بینی‌ها، و ردپای ممیزی لاگ‌ها) فایل پشتیبان یکپارچه تهیه کنید، فایل‌های قبلی را بازیابی کنید، یا خروجی داده تکی دریافت نمایید.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Multiple Export options */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {/* Export Participants CSV */}
+                  <div className="p-4 bg-slate-950/30 rounded-2xl border border-white/5 space-y-3 flex flex-col justify-between">
+                    <div>
+                      <span className="text-[10px] bg-indigo-500/10 text-indigo-400 px-2.5 py-0.5 rounded font-black">خروجی اول</span>
+                      <h5 className="text-xs font-black text-slate-200 mt-2">لیست کامل شرکت‌کنندگان</h5>
+                      <p className="text-[10px] text-slate-450 leading-relaxed mt-1">مشخصات هویتی، آدرس‌ها، دوره تحصیلی و نمرات تجمعی.</p>
+                    </div>
+                    <a
+                      href="/api/admin/participants-csv"
+                      download="all_participants.csv"
+                      className="mt-3 py-2.5 w-full rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 text-indigo-300 hover:text-white font-black text-xs transition-all flex items-center justify-center gap-2"
+                    >
+                      <Download size={14} />
+                      <span>دانلود خروجی CSV کاربران</span>
+                    </a>
+                  </div>
+
+                  {/* Export Predictions CSV */}
+                  <div className="p-4 bg-slate-950/30 rounded-2xl border border-white/5 space-y-3 flex flex-col justify-between">
+                    <div>
+                      <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2.5 py-0.5 rounded font-black">خروجی دوم</span>
+                      <h5 className="text-xs font-black text-slate-200 mt-2">دیتابیس پیش‌بینی‌ها</h5>
+                      <p className="text-[10px] text-slate-450 leading-relaxed mt-1">پیش‌بینی تفکیک‌شده تک‌تک کاربران برای تک‌تک مسابقات.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={downloadPredictionsCsv}
+                      className="mt-3 py-2.5 w-full rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-300 hover:text-white font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <FileSpreadsheet size={14} />
+                      <span>دانلود خروجی CSV پیش‌بینی‌ها</span>
+                    </button>
+                  </div>
+
+                  {/* Export Audit trail Activity logs */}
+                  <div className="p-4 bg-slate-950/30 rounded-2xl border border-white/5 space-y-3 flex flex-col justify-betweensm:col-span-2 lg:col-span-1">
+                    <div>
+                      <span className="text-[10px] bg-pink-500/10 text-pink-400 px-2.5 py-0.5 rounded font-black">خروجی سوم</span>
+                      <h5 className="text-xs font-black text-slate-200 mt-2">تاریخچه فعالیت سیستم</h5>
+                      <p className="text-[10px] text-slate-450 leading-relaxed mt-1">ثبت وقایع کلیک‌ها، تراکنش‌ها و حسابرسی دقیق فرآیندها.</p>
+                    </div>
+                    <a
+                      href="/api/admin/action-logs-csv"
+                      download="action_audit_trail.csv"
+                      className="mt-3 py-2.5 w-full rounded-xl bg-pink-500/10 hover:bg-pink-500/20 border border-pink-500/20 text-pink-300 hover:text-white font-black text-xs transition-all flex items-center justify-center gap-2"
+                    >
+                      <Database size={14} />
+                      <span>دانلود ردپای ممیزی (CSV)</span>
+                    </a>
+                  </div>
+                </div>
+
+                {/* Backups engine manager */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  
+                  {/* Left panel: Available disk backups */}
+                  <div className="p-6 bg-slate-950/40 border border-white/10 rounded-2xl space-y-4">
+                    <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                      <button
+                        type="button"
+                        onClick={fetchBackupsList}
+                        disabled={loadingBackups}
+                        className="text-[10px] bg-white/5 hover:bg-white/10 px-2.5 py-1 rounded border border-white/10 font-bold cursor-pointer"
+                      >
+                        {loadingBackups ? "بروزرسانی..." : "🔄 بازخوانی لیست"}
+                      </button>
+                      <h5 className="text-sm font-black text-slate-200 flex items-center gap-2">
+                        <HardDrive size={16} className="text-sky-400" />
+                        <span>نسخه‌های پشتیبان سروری موجود</span>
+                      </h5>
+                    </div>
+
+                    {loadingBackups ? (
+                      <div className="py-12 text-center text-slate-500 text-xs">در حال بارگزاری و ممیزی هارد سرور...</div>
+                    ) : backupsList.length === 0 ? (
+                      <div className="py-12 text-center text-slate-500 text-xs">فایل بک‌آپی روی سرور یافت نشد. دکمه «ایجاد نسخه پشتیبان فوری» را بزنید.</div>
+                    ) : (
+                      <div className="space-y-2.5 max-h-[280px] overflow-y-auto">
+                        {backupsList.map((b, idx) => (
+                          <div key={b.filename} className="p-3 bg-slate-900 rounded-xl border border-white/5 hover:border-slate-850 transition-all duration-150 flex items-center justify-between gap-4 text-xs">
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleRestoreBackup(b.filename)}
+                                disabled={isRestoringBackup}
+                                className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-black font-black text-[10px] duration-150 cursor-pointer outline-none"
+                              >
+                                بازیابی 🔄
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteBackup(b.filename)}
+                                className="px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 font-bold text-[10px] cursor-pointer"
+                              >
+                                حذف
+                              </button>
+                            </div>
+                            <div className="text-right flex-1 min-w-0">
+                              <span className="block text-slate-200 font-mono text-[11px] truncate font-bold" dir="ltr">{b.filename}</span>
+                              <div className="flex justify-end gap-3 text-[10px] text-slate-500 mt-1 font-semibold">
+                                <span>حجم: <strong className="font-mono text-slate-400">{(b.sizeBytes / 1024).toFixed(1)} KB</strong></span>
+                                <span>زمان ایجاد: <strong className="font-mono text-slate-450">{new Date(b.createdAt).toLocaleDateString("fa-IR")}</strong></span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right panel: Active recovery actions */}
+                  <div className="p-6 bg-slate-950/40 border border-white/10 rounded-2xl space-y-4 text-right">
+                    <h5 className="text-sm font-black text-slate-200 border-b border-white/5 pb-3">
+                      عملیات امنیتی و پدافند غیرعامل داده‌ها
+                    </h5>
+
+                    <div className="space-y-4">
+                      {/* Create server side snapshot */}
+                      <div className="space-y-1.5 text-right">
+                        <span className="text-[11px] font-bold text-slate-350">۱. ثبت نسخه اضطراری محلی (روی دیسک سرور)</span>
+                        <p className="text-[10px] text-slate-500 leading-relaxed">این فرآیند کلیه مشخصات جدول فعلی شما را در فایلی با تاریخ همزمان فرمت کرده و به طور ایمن در فولدر پشتیبان ابری بایگانی می‌کند.</p>
+                        <button
+                          type="button"
+                          onClick={handleCreateBackup}
+                          disabled={isGeneratingBackup || loading}
+                          className="w-full py-3 rounded-xl bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-black font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer outline-none shadow-md"
+                        >
+                          <Database size={15} />
+                          <span>{isGeneratingBackup ? "در حال پردازش..." : "ایجاد نسخه پشتیبان فوری روی دیسک سرور"}</span>
+                        </button>
+                      </div>
+
+                      {/* Download full JSON file copy */}
+                      <div className="space-y-1.5 text-right pt-3 border-t border-white/5">
+                        <span className="text-[11px] font-bold text-slate-350">۲. دریافت بایگانی کامل (JSON) روی رایانه شخص ادمین</span>
+                        <p className="text-[10px] text-slate-500 leading-relaxed">یک نسخه کپی فشرده یکپارچه از تمام جداول کاربران، لاگ‌ها و بازی‌ها برای خود دانلود و در محلی امن نگهداری کنید.</p>
+                        <a
+                          href="/api/admin/backup/download-full"
+                          download="full_cups_database_backup.json"
+                          className="w-full py-3 rounded-xl bg-slate-900 border border-white/10 hover:bg-slate-850 text-slate-200 hover:text-white font-black text-xs transition-all flex items-center justify-center gap-2 text-center"
+                        >
+                          <Download size={15} />
+                          <span>دریافت و دانلود مستقیم کپی کامل پایگاه داده</span>
+                        </a>
+                      </div>
+
+                      {/* Upload and restore manual JSON copy */}
+                      <div className="space-y-1.5 text-right pt-3 border-t border-white/5">
+                        <span className="text-[11px] font-bold text-slate-350">۳. بازیابی اضطراری با بارگذاری فایل آرشیو</span>
+                        <p className="text-[10px] text-slate-500 leading-relaxed">برای برگرداندن داده‌ها پس از حذف اتفاقی، فایل پشتیبان دانلود شده قبلی خود را انتخاب کرده تا بر روی دیتای کل سیستم بازنویسی شود.</p>
+                        
+                        <label className="relative overflow-hidden w-full py-3 rounded-xl bg-slate-950 border border-dashed border-white/20 hover:border-white/40 text-slate-400 hover:text-slate-200 font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer">
+                          <Upload size={14} />
+                          <span>انتخاب و بازگردانی فایل پشتیبان (.json) 📁</span>
+                          <input
+                            type="file"
+                            accept=".json"
+                            onChange={handleUploadBackupFile}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Secure instructions note */}
+                <div className="p-4 bg-slate-900/40 rounded-2xl border border-sky-500/20 flex gap-3 text-slate-455 text-[10px] sm:text-xs text-right">
+                  <Shield className="text-sky-400 flex-shrink-0 mt-0.5 animate-pulse" size={16} />
+                  <div className="space-y-1 leading-relaxed text-right w-full" dir="rtl">
+                    <p className="font-bold text-sky-350">توجه امنیتی حفاظت از اطلاعات شادکیو:</p>
+                    <p className="text-[11px] text-slate-400">
+                      این موتور به پروتکل‌های رمزگذاری لایه نفوذ مجهز بوده و دسترسی به فایل‌های پشتیبان و اعمال بازیابی منحصراً با احراز هویت قوی توکن مدیریت مقدور است. پدافند پیشگیرانه به طور خودکار قبل از اجرای هرگونه شبیه‌سازی یا حذف فیزیکی، یک رونوشت پنهان تهیه می‌کند تا امکان از دست رفتن تلاش‌های شرکت‌کنندگان گرامی مطلقا به صفر برسد.
                     </p>
                   </div>
                 </div>

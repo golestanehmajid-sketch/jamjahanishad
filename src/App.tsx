@@ -898,6 +898,11 @@ export default function App() {
   };
 
   const submitPredictionToServer = async (customContact?: string, isSilent: boolean = false) => {
+    if (isAdminMode || isResultsAdminMode) {
+      setAutoSaveStatus("idle");
+      return;
+    }
+
     if (!isSilent) setIsSubmittingToDB(true);
     setAutoSaveStatus("saving");
     try {
@@ -908,6 +913,16 @@ export default function App() {
         return p && p.scoreA !== null && p.scoreB !== null;
       }).length;
       const totalPreds = groupPredCount + koPredCount;
+
+      const hasPredictions = totalPreds > 0;
+      const hasCustomName = userName && userName !== "کاربر شاد";
+
+      // If user has no prediction, no custom name, and no active shad profile, avoid saving to DB as a fake empty visitor
+      if (!hasPredictions && !hasCustomName && !shadProfile) {
+        setAutoSaveStatus("idle");
+        setIsSubmittingToDB(false);
+        return;
+      }
 
       let predictedChamp = "نامشخص";
       if (campaignChamp && TEAMS[campaignChamp]) {
