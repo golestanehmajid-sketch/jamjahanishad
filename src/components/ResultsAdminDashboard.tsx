@@ -1185,7 +1185,7 @@ export const ResultsAdminDashboard: React.FC<{ setActiveTab?: (tab: any) => void
                         <div className="flex gap-2 w-full sm:w-auto shrink-0 justify-end">
                           <button
                             type="button"
-                            onClick={() => toggleUserExpanded(u.id)}
+                            onClick={() => setExpandedUsers(prev => ({ ...prev, [u.id]: !prev[u.id] }))}
                             className={`flex items-center gap-1.5 h-9 px-3.5 rounded-xl text-xs font-bold cursor-pointer transition-all ${
                               isExpanded 
                                 ? "bg-purple-500/20 text-purple-400 border border-purple-500/30"

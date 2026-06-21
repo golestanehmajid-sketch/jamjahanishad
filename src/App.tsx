@@ -13,7 +13,6 @@ import { GroupStandings } from "./components/GroupStandings";
 import { KnockoutStage } from "./components/KnockoutStage";
 import { BadgeCard } from "./components/BadgeCard";
 import { TeamFlag } from "./components/TeamFlag";
-import { SoccerLiveTracker } from "./components/SoccerLiveTracker";
 import { IranSupporterHub } from "./components/IranSupporterHub";
 import { TeensGiftHub } from "./components/TeensGiftHub";
 import { ParticipantsDashboard } from "./components/ParticipantsDashboard";
@@ -309,7 +308,7 @@ export default function App() {
            hash.includes("admin") || hash.includes("panel");
   });
 
-  const [activeTab, setActiveTab] = useState<"groups" | "standings" | "knockout" | "achievements" | "sportsNews" | "participants" | "adminDashboard" | "resultsAdmin" | "rules">(() => {
+  const [activeTab, setActiveTab] = useState<"groups" | "standings" | "knockout" | "achievements" | "participants" | "adminDashboard" | "resultsAdmin" | "rules">(() => {
     const params = new URLSearchParams(window.location.search);
     const path = window.location.pathname.toLowerCase();
     const hash = window.location.hash.toLowerCase();
@@ -446,7 +445,6 @@ export default function App() {
       standings: "جدول‌های تفکیکی رده‌بندی 📊",
       knockout: "نمودار مرحله حذفی 🏆",
       achievements: "نشان‌ها و دستاوردهای من 🏅",
-      sportsNews: "اخبار و پخش زنده 📺",
       rules: "راهنما و جوایز مسابقه 🎁",
       participants: "جدول کارشناسی شرکت‌کنندگان 👥",
       adminDashboard: "پنل مدیریت ابری ⚡"
@@ -1590,7 +1588,6 @@ export default function App() {
             { id: "standings", label: "جدول‌های تفکیکی رده‌بندی", icon: Award },
             { id: "knockout", label: "نمودار مرحله حذفی (پلی‌آف)", icon: Trophy },
             { id: "achievements", label: "نشان‌ها و دستاوردهای من", icon: Sparkles },
-            { id: "sportsNews", label: "اخبار و پخش زنده", icon: Radio },
             { id: "rules", label: "راهنما و جوایز", icon: Gift },
             { id: "participants", label: "جدول کارشناسی شرکت‌کنندگان", icon: Users },
             ...(isAdminMode ? [{ id: "adminDashboard", label: "⚡ پنل مدیریت ابری", icon: ShieldCheck }] : [])
@@ -2289,23 +2286,6 @@ export default function App() {
             </motion.div>
           )}
 
-          {/* 5. SOCCER LIVE TRACKER & STATS SYNC VIEW */}
-          {activeTab === "sportsNews" && (
-            <motion.div
-              id="view-sportsNews"
-              key="sportsNews"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -15 }}
-              transition={{ duration: 0.15 }}
-            >
-              <SoccerLiveTracker
-                matches={matches}
-              />
-            </motion.div>
-          )}
-
-
           {/* 6. PARTICIPANTS DASHBOARD VIEW */}
           {activeTab === "participants" && (
             <motion.div
@@ -2765,7 +2745,7 @@ export default function App() {
         ].map((tab) => {
           const Icon = tab.icon;
           // The more button is active if the active tab is one of the secondary pages (not the main 4)
-          const isSecondaryActive = ["achievements", "sportsNews", "rules", "adminDashboard"].includes(activeTab);
+          const isSecondaryActive = ["achievements", "rules", "adminDashboard"].includes(activeTab);
           const isActive = tab.id === "more" ? isSecondaryActive : activeTab === tab.id;
 
           return (
@@ -2853,7 +2833,6 @@ export default function App() {
               <div className="grid grid-cols-2 gap-3 py-2">
                 {[
                   { id: "achievements", label: "نشان‌ها و دستاوردها", desc: "جوایز و مدال‌های کسب شده", icon: Sparkles, color: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
-                  { id: "sportsNews", label: "اخبار و پخش زنده", desc: "ویدیوها و خبرهای جام", icon: Radio, color: "text-red-400 bg-red-500/10 border-red-500/20" },
                   { id: "rules", label: "قوانین و جوایز مسابقه", desc: "راهنمای کامل ثبت پیش‌بینی", icon: Gift, color: "text-purple-400 bg-purple-500/10 border-purple-500/20" },
                   ...(isAdminMode ? [{ id: "adminDashboard", label: "پنل مدیریت سیستم", desc: "دسترسی بوقچی ارشد", icon: ShieldCheck, color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" }] : [])
                 ].map((item) => {

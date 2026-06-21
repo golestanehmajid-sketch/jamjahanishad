@@ -93,6 +93,8 @@ export const AppAdminDashboard: React.FC = () => {
   const [isSyncingLiveScores, setIsSyncingLiveScores] = useState<boolean>(false);
   const [predictionViewFilter, setPredictionViewFilter] = useState<"all" | "correct_exact" | "correct_outcome" | "incorrect">("all");
   const [predictionSearch, setPredictionSearch] = useState<string>("");
+  const [syncNotification, setSyncNotification] = useState<{ text: string; type: "success" | "info" | "error" } | null>(null);
+  const [hasAutoSynced, setHasAutoSynced] = useState<boolean>(false);
 
   const [isDrawing, setIsDrawing] = useState<boolean>(false);
   const [drawnName, setDrawnName] = useState<string>("");
@@ -141,6 +143,26 @@ export const AppAdminDashboard: React.FC = () => {
       sessionStorage.removeItem("admin_dashboard_subtab");
     }
   }, [selectedMatchId, matches]);
+
+  // Automatic background synchronization when raffle sub-tab is loaded
+  useEffect(() => {
+    if (adminSubTab === "raffle" && !hasAutoSynced) {
+      handleAutoSyncWithLiveScoresSilent();
+      setHasAutoSynced(true);
+    } else if (adminSubTab !== "raffle") {
+      setHasAutoSynced(false);
+    }
+  }, [adminSubTab, hasAutoSynced]);
+
+  // Auto-dismiss the notification after 7 seconds
+  useEffect(() => {
+    if (syncNotification) {
+      const timer = setTimeout(() => {
+        setSyncNotification(null);
+      }, 7000);
+      return () => clearTimeout(timer);
+    }
+  }, [syncNotification]);
 
   // Load action logs
   const fetchActionLogs = async (silent = false) => {
@@ -364,6 +386,143 @@ export const AppAdminDashboard: React.FC = () => {
     } catch (err) {
       console.error(err);
       alert("❌ خطای پیش‌بینی نشده در اتصال به وب‌سرویس.");
+    } finally {
+      setIsSyncingLiveScores(false);
+    }
+  };
+
+  const handleAutoSyncWithLiveScoresSilent = async () => {
+    setIsSyncingLiveScores(true);
+    setSyncNotification({ text: "🔄 در حال همگام‌سازی خودکار نتایج واقعی بازی‌ها از وب‌سرویس...", type: "info" });
+    try {
+      const res = await fetch("/api/sports-hub/livescore");
+      if (!res.ok) {
+        setSyncNotification({ text: "❌ خطا در همگام‌سازی خودکار: سرور جواب نداد.", type: "error" });
+        return;
+      }
+      const json = await res.json();
+      if (!json.success || !json.data) {
+        setSyncNotification({ text: "⚠️ فید نتایج زنده خالی یا نامعتبر بود.", type: "info" });
+        return;
+      }
+
+      const extractedMatches: any[] = [];
+      for (const league of json.data) {
+        for (const dateObj of league.dates || []) {
+          for (const sm of dateObj.matches || []) {
+            extractedMatches.push({
+              ...sm,
+              dateLabel: dateObj.date
+            });
+          }
+        }
+      }
+
+      if (extractedMatches.length === 0) {
+        setSyncNotification({ text: "⚠️ هیچ مسابقه‌ای در وب‌سرویس زنده یافت نشد.", type: "info" });
+        return;
+      }
+
+      const norm = (s: string) => s.replace(/[\s\-_,\.]/g, "").toLowerCase();
+      const matchTeamEn = (team: any, scrapName: string) => {
+        if (!team || !scrapName) return false;
+        const normTeamEn = norm(team.nameEn || "");
+        const scrapEn = scrapName.toLowerCase();
+        
+        const synonyms: Record<string, string[]> = {
+          "usa": ["united states", "united states of america", "us", "america", "آمریکا", "ایالات متحده"],
+          "korea": ["south korea", "korea republic", "korea", "korea rep", "کره جنوبی", "کره"],
+          "drcongo": ["dr congo", "congo dr", "democratic republic of the congo", "congo", "کنگو", "جمهوری دموکراتیک کنگو"],
+          "czech": ["czech republic", "czechia", "czech", "جمهوری چک", "چک"],
+          "ivorycoast": ["ivory coast", "côte d'ivoire", "cote d'ivoire", "ivorycoast", "ساحل عاج"],
+          "saudi": ["saudi arabia", "saudi", "saudi_arabia", "عربستان", "عربستان سعودی"],
+          "southafrica": ["south africa", "s. africa", "آفریقای جنوبی"],
+          "newzealand": ["new zealand", "n. zealand", "نیوزیلند"],
+          "capeverde": ["cape verde", "cabo verde", "کیپ ورد"],
+          "morocco": ["morocco", "مراکش", "مغرب"],
+          "england": ["england", "انگلستان", "انگلیس"]
+        };
+
+        for (const [key, list] of Object.entries(synonyms)) {
+          const isTeamMatch = normTeamEn.includes(key) || key.includes(normTeamEn);
+          if (isTeamMatch) {
+            const matchFound = list.some(item => {
+              const lowerItem = item.toLowerCase();
+              return scrapEn === lowerItem || norm(scrapEn) === norm(lowerItem);
+            });
+            if (matchFound) return true;
+          }
+        }
+
+        if (scrapEn.includes(normTeamEn) || normTeamEn.includes(scrapEn)) {
+          return true;
+        }
+        return false;
+      };
+
+      const finishedScraped = extractedMatches.filter(sm => sm.status === 2 && sm.hostGoals !== null && sm.guestGoals !== null);
+      
+      if (finishedScraped.length === 0) {
+        setSyncNotification({ text: "ℹ️ تمام نتایج با وب‌سرویس زنده هماهنگ هستند. بازی جدیدی یافت نشد.", type: "info" });
+        return;
+      }
+
+      let syncCount = 0;
+      // Use matches or initial local generation
+      const allMatches = matches.length > 0 ? matches : generateGroupMatches();
+      for (const m of allMatches) {
+        const found = finishedScraped.find(sm => {
+          const hostOk = matchTeamEn(m.teamA, sm.host?.nameEn || sm.host) && matchTeamEn(m.teamB, sm.guest?.nameEn || sm.guest);
+          const reversedOk = matchTeamEn(m.teamA, sm.guest?.nameEn || sm.guest) && matchTeamEn(m.teamB, sm.host?.nameEn || sm.host);
+          return hostOk || reversedOk;
+        });
+
+        if (found) {
+          const isReversed = matchTeamEn(m.teamA, found.guest?.nameEn || found.guest);
+          const scoreA = isReversed ? found.guestGoals : found.hostGoals;
+          const scoreB = isReversed ? found.hostGoals : found.guestGoals;
+
+          const payload = {
+            matchId: m.id,
+            scoreA: Number(scoreA),
+            scoreB: Number(scoreB),
+            isOfficial: true,
+            isLive: false,
+            minute: 90,
+            teamA: { id: m.teamA.id, name: m.teamA.name, flag: m.teamA.flag || "" },
+            teamB: { id: m.teamB.id, name: m.teamB.name, flag: m.teamB.flag || "" }
+          };
+
+          const sRes = await fetch("/api/manual-results", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-results-password": "natijeh1405"
+            },
+            body: JSON.stringify(payload)
+          });
+          if (sRes.ok) {
+            syncCount++;
+          }
+        }
+      }
+
+      if (syncCount > 0) {
+        await fetchData();
+        setSyncNotification({ 
+          text: `🟢 همگام‌سازی موفقیت‌آمیز! نتایج ${syncCount} مسابقه با وب‌سرویس زنده همگام شد و نتایج کاربران بروز گردید.`, 
+          type: "success" 
+        });
+      } else {
+        setSyncNotification({ 
+          text: "ℹ️ نتایج مسابقات هماهنگ و به‌روز است. تغییرات جدیدی یافت نشد.", 
+          type: "info" 
+        });
+      }
+
+    } catch (err) {
+      console.error(err);
+      setSyncNotification({ text: "❌ خطا در همگام‌سازی پس‌زمینه.", type: "error" });
     } finally {
       setIsSyncingLiveScores(false);
     }
@@ -1573,6 +1732,38 @@ export const AppAdminDashboard: React.FC = () => {
             ) : adminSubTab === "raffle" ? (
               // TAB 4: COMPREHENSIVE RAFFLE AND DRAW SYSTEM (requested)
               <div className="space-y-6">
+                {/* Notification Toast/Banner inside Raffle tab */}
+                <AnimatePresence>
+                  {syncNotification && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className={`p-4 rounded-2xl border flex items-center justify-between gap-3 text-right backdrop-blur-md ${
+                        syncNotification.type === "success"
+                          ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                          : syncNotification.type === "error"
+                          ? "bg-rose-500/10 border-rose-500/30 text-rose-350"
+                          : "bg-indigo-500/10 border-indigo-500/30 text-indigo-305"
+                      }`}
+                      dir="rtl"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs sm:text-sm font-bold w-full">
+                          {syncNotification.text}
+                        </span>
+                      </div>
+                      <button 
+                        type="button" 
+                        onClick={() => setSyncNotification(null)}
+                        className="text-[10px] bg-white/5 hover:bg-white/10 px-2.5 py-1 rounded-md text-slate-300 cursor-pointer outline-none border-none select-none shrink-0"
+                      >
+                        بستن ×
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-4 text-right" dir="rtl">
                   <div className="space-y-1">
                     <h4 className="text-sm font-black text-slate-100 flex items-center gap-2 justify-end">
@@ -1738,15 +1929,12 @@ export const AppAdminDashboard: React.FC = () => {
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between">
                         <label className="text-[10px] sm:text-xs text-slate-400 font-bold">انتخاب مسابقه مورد نظر:</label>
-                        <button
-                          type="button"
-                          disabled={isSyncingLiveScores}
-                          onClick={handleAutoSyncWithLiveScores}
-                          className="flex items-center gap-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/25 text-[10px] sm:text-xs px-2.5 py-1 rounded-lg font-black transition-all duration-150 cursor-pointer disabled:opacity-50"
-                        >
-                          <RefreshCw size={11} className={isSyncingLiveScores ? "animate-spin" : ""} />
-                          <span>{isSyncingLiveScores ? "در حال دریافت نتایج..." : "🔄 همگام‌سازی خودکار نتایج واقعی"}</span>
-                        </button>
+                        {isSyncingLiveScores && (
+                          <div className="flex items-center gap-1.5 text-[10px] text-emerald-400 font-bold animate-pulse">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                            <span>در حال همگام‌سازی خودکار نتایج واقعی...</span>
+                          </div>
+                        )}
                       </div>
                       <select
                         value={selectedMatchId}
